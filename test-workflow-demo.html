@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Automation Demo</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 2.5em;
+        }
+        
+        .hero-headline {
+            font-size: 2em;
+            color: #3498db;
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .demo-section {
+            background: #f8f9fa;
+            padding: 30px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border-left: 5px solid #3498db;
+        }
+        
+        .demo-section h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .demo-section p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        /* Buttons and CTAs */
+        .cta-button, .btn, button {
+            background: #e74c3c;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+            display: inline-block;
+            text-decoration: none;
+        }
+        
+        .cta-button:hover, .btn:hover, button:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        /* Links */
+        a[href] {
+            color: #3498db;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            background: rgba(52, 152, 219, 0.1);
+            transition: all 0.3s ease;
+            display: inline-block;
+            margin: 5px;
+        }
+        
+        a[href]:hover {
+            background: rgba(52, 152, 219, 0.2);
+            transform: translateX(5px);
+        }
+        
+        /* Forms */
+        .demo-form {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        /* Special elements for workflow testing */
+        .special-offer {
+            background: #2ecc71;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+            display: none; /* Hidden by default, will be shown by workflow */
+        }
+        
+        .google-offer {
+            background: #f39c12;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        #google-offer-banner {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        /* Progressive form fields */
+        #progressive-fields {
+            display: none;
+            background: #e8f5e8;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        /* Device-specific styles */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .hero-headline {
+                font-size: 1.5em;
+            }
+        }
+        
+        /* Status indicators */
+        .status-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .status-indicator.success {
+            background: #27ae60;
+        }
+        
+        .status-indicator.warning {
+            background: #f39c12;
+        }
+        
+        /* Controls */
+        .controls-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1001;
+        }
+        
+        .controls-panel label {
+            display: block;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        
+        .controls-panel input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        /* Content sections for visibility tracking */
+        .content, article, main {
+            min-height: 400px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        
+        .main-content {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Workflow Automation Demo</h1>
+        
+        <div class="hero-headline">
+            Welcome to Our Amazing Platform!
+        </div>
+        
+        <div id="google-offer-banner">
+            🎉 Special Google Visitor Offer - 50% Off Today Only!
+        </div>
+        
+        <div class="special-offer">
+            🎊 Congratulations! You've unlocked a special offer!
+        </div>
+        
+        <div class="google-offer">
+            🔥 Google Traffic Special: Get 30% off your first purchase!
+        </div>
+        
+        <div class="demo-section">
+            <h2>🚀 Device Detection Demo</h2>
+            <p>This workflow will detect your device type and personalize the CTA buttons accordingly.</p>
+            <p><strong>Expected behavior:</strong> On mobile devices, "Click to Get Started" should change to "Tap to Get Started"</p>
+            <button class="cta-button">Click to Get Started</button>
+            <button class="btn">Sign Up Now</button>
+        </div>
+        
+        <div class="demo-section">
+            <h2>🎯 UTM Parameter Demo</h2>
+            <p>Try adding <code>?utm_source=google</code> to the URL to trigger UTM-based personalization.</p>
+            <p><strong>Expected behavior:</strong> Headlines and special offers will be customized for Google traffic.</p>
+            <a href="?utm_source=google">Test Google UTM</a>
+            <a href="?utm_source=facebook">Test Facebook UTM</a>
+            <a href="?utm_source=email">Test Email UTM</a>
+        </div>
+        
+        <div class="demo-section">
+            <h2>🖱️ Element Click Demo</h2>
+            <p>Click on any of these links to trigger the click-based workflow automation.</p>
+            <p><strong>Expected behavior:</strong> Clicking links should show an overlay popup.</p>
+            <a href="#demo1">Demo Link 1</a>
+            <a href="#demo2">Demo Link 2</a>
+            <a href="#demo3">Demo Link 3</a>
+            <a href="https://example.com" target="_blank">External Link</a>
+        </div>
+        
+        <div class="demo-section">
+            <h2>📝 Progressive Form Demo</h2>
+            <p>Focus on the email field to see progressive form fields appear.</p>
+            <form class="demo-form" action="#" method="post">
+                <div class="form-group">
+                    <label for="name">Name:</label>
+                    <input type="text" id="name" name="name" placeholder="Enter your name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" placeholder="Enter your email">
+                </div>
+                
+                <div id="progressive-fields">
+                    <div class="form-group">
+                        <label for="company">Company:</label>
+                        <input type="text" id="company" name="company" placeholder="Your company">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone">Phone:</label>
+                        <input type="tel" id="phone" name="phone" placeholder="Your phone number">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="interest">Interest:</label>
+                        <select id="interest" name="interest">
+                            <option value="">Select your interest</option>
+                            <option value="product">Product Demo</option>
+                            <option value="pricing">Pricing Information</option>
+                            <option value="support">Support</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit">Submit Form</button>
+            </form>
+        </div>
+        
+        <main class="main-content">
+            <h2>📊 Visibility Tracking Demo</h2>
+            <p>This content section is being tracked for visibility. When you scroll and this section becomes visible, it may trigger additional workflows.</p>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+            <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+            <div class="demo-section">
+                <h3>Nested Content</h3>
+                <p>This is nested content within the main content area. It should also be tracked for interactions.</p>
+                <button class="btn">Nested Button</button>
+            </div>
+        </main>
+        
+        <article class="content">
+            <h2>📈 Analytics & Tracking</h2>
+            <p>All interactions on this page are being tracked and can trigger workflow automations in real-time.</p>
+            <p>Check the browser console to see detailed tracking information and workflow execution logs.</p>
+            
+            <div class="demo-section">
+                <h3>Tracked Elements</h3>
+                <ul>
+                    <li>✅ All buttons and CTA elements</li>
+                    <li>✅ All links and navigation</li>
+                    <li>✅ Form fields and submissions</li>
+                    <li>✅ Content visibility and scroll depth</li>
+                    <li>✅ Device type and browser info</li>
+                    <li>✅ UTM parameters and traffic source</li>
+                </ul>
+            </div>
+        </article>
+    </div>
+    
+    <!-- Controls panel -->
+    <div class="controls-panel">
+        <label>
+            <input type="checkbox" id="hide-content-toggle" checked>
+            Hide content during initialization
+        </label>
+        <button onclick="location.reload()" style="background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+            Reload Page
+        </button>
+    </div>
+
+    <!-- Status indicator -->
+    <div id="status-indicator" class="status-indicator">
+        🎯 Workflow system initializing...
+    </div>
+    
+    <!-- Load the enhanced tracking script with workflow integration -->
+    <script>
+        // Check if content hiding should be disabled based on toggle
+        const hideContentToggle = document.getElementById('hide-content-toggle');
+        const shouldHideContent = hideContentToggle ? hideContentToggle.checked : true;
+        
+        // Configuration for this demo page
+        window.workflowConfig = {
+            debug: true,
+            apiEndpoint: 'https://trackflow-webapp-production.up.railway.app',
+            enableWorkflows: true,
+            hideContentDuringInit: shouldHideContent,
+            maxInitTime: 3000
+        };
+        
+        // Status indicator helper
+        function updateStatus(message, type = 'info') {
+            const indicator = document.getElementById('status-indicator');
+            indicator.textContent = message;
+            indicator.className = `status-indicator ${type}`;
+            
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    indicator.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Update status when workflow system is ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (window.workflowExecutor && window.elementTracker) {
+                    const hideContentEnabled = window.workflowConfig?.hideContentDuringInit;
+                    updateStatus(`🎯 Workflow automation ready! ${hideContentEnabled ? '(FOUC prevention: ON)' : '(FOUC prevention: OFF)'}`, 'success');
+                } else {
+                    updateStatus('⚠️ Workflow system failed to initialize', 'warning');
+                }
+            }, 2000);
+        });
+        
+        // Demo-specific interactions
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add some demo interactions
+            const demoButtons = document.querySelectorAll('.demo-section button');
+            demoButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    console.log('🎯 Demo button clicked:', this.textContent);
+                });
+            });
+            
+            // Progressive form demo
+            const emailField = document.getElementById('email');
+            if (emailField) {
+                emailField.addEventListener('focus', function() {
+                    console.log('📝 Email field focused - progressive fields should appear');
+                });
+            }
+        });
+    </script>
+    
+    <!-- Load enhanced tracking script -->
+    <script src="https://trackflow-webapp-production.up.railway.app/enhanced-tracking-script.js"></script>
+    
+    <!-- Load workflow executor (will be loaded automatically by enhanced tracker) -->
+    <script>
+        // Additional demo functionality
+        console.log('🎯 Workflow Demo Page: Ready for testing');
+        console.log('🎯 Available global objects:', {
+            elementTracker: typeof window.elementTracker,
+            workflowExecutor: typeof window.workflowExecutor,
+            WorkflowExecutor: typeof window.WorkflowExecutor
+        });
+    </script>
+</body>
+</html> 

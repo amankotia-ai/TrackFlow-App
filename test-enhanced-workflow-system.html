@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enhanced Workflow System Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+      background: #f5f5f5;
+    }
+    
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    
+    .test-section {
+      border: 2px dashed #e0e0e0;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    
+    .test-section h3 {
+      margin-top: 0;
+      color: #333;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 10px;
+    }
+    
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 10px;
+      font-size: 16px;
+      transition: all 0.3s ease;
+    }
+    
+    button:hover {
+      background: #0056b3;
+      transform: translateY(-2px);
+    }
+    
+    .cta-button {
+      background: #28a745;
+      font-weight: bold;
+    }
+    
+    .cta-button:hover {
+      background: #1e7e34;
+    }
+    
+    input[type="text"], input[type="email"] {
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      margin: 10px;
+      font-size: 16px;
+      width: 200px;
+    }
+    
+    .hero-headline {
+      font-size: 2.5em;
+      font-weight: bold;
+      color: #333;
+      text-align: center;
+      margin: 20px 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 10px;
+    }
+    
+    .status {
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    
+    .status.loading {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      color: #856404;
+    }
+    
+    .status.success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+    
+    .status.error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+    
+    .logs {
+      background: #000;
+      color: #0f0;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    
+    .element-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+    
+    .test-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    
+    a {
+      color: #007bff;
+      text-decoration: none;
+      padding: 10px 15px;
+      border: 2px solid #007bff;
+      border-radius: 5px;
+      margin: 10px;
+      display: inline-block;
+    }
+    
+    a:hover {
+      background: #007bff;
+      color: white;
+    }
+    
+    .banner {
+      background: #ff6b6b;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    
+    .sidebar {
+      background: #6c757d;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    
+    .dynamic-content {
+      border: 2px dashed #007bff;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      min-height: 60px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Enhanced Workflow System Test</h1>
+    <p>This page tests the enhanced workflow system with robust content replacement logic adapted from utm-magic.js.</p>
+    
+    <div id="status" class="status loading">
+      <strong>Status:</strong> 🔄 Loading enhanced workflow system...
+    </div>
+    
+    <div class="test-section">
+      <h3>🎯 Content Replacement Tests</h3>
+      
+      <div class="element-grid">
+        <div class="test-card">
+          <h4>Headlines & Text</h4>
+          <div class="hero-headline">Welcome to Our Site</div>
+          <p class="description">This is a standard description</p>
+          <span class="subtitle">Subtitle Text</span>
+        </div>
+        
+        <div class="test-card">
+          <h4>Buttons</h4>
+          <button class="cta-button">Get Started</button>
+          <button id="primary-btn">Click Me</button>
+          <input type="submit" value="Submit Form" class="submit-btn">
+          <input type="button" value="Button Input" class="btn-input">
+        </div>
+        
+        <div class="test-card">
+          <h4>Form Inputs</h4>
+          <input type="text" placeholder="Enter your name" class="name-input">
+          <input type="email" placeholder="Enter email" class="email-input">
+          <input type="tel" placeholder="Phone number" class="phone-input">
+        </div>
+        
+        <div class="test-card">
+          <h4>Links</h4>
+          <a href="#" class="nav-link">Navigation Link</a>
+          <a href="mailto:test@example.com" class="email-link">Contact Us</a>
+          <a href="tel:+1234567890" class="phone-link">Call Now</a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="test-section">
+      <h3>🔄 Dynamic Content Tests</h3>
+      
+      <button onclick="addDynamicContent()">Add Dynamic Content</button>
+      <button onclick="removeDynamicContent()">Remove Dynamic Content</button>
+      
+      <div id="dynamic-container" class="dynamic-content">
+        <p>Dynamic content will appear here...</p>
+      </div>
+    </div>
+    
+    <div class="test-section">
+      <h3>👁️ Hide/Show Tests</h3>
+      
+      <div class="banner" id="promo-banner">🎉 Special Promotion Banner</div>
+      <div class="sidebar" id="main-sidebar">📋 Sidebar Content</div>
+    </div>
+    
+    <div class="test-section">
+      <h3>📱 Device-Specific Tests</h3>
+      <p id="device-info">Device Type: <span id="device-type">Unknown</span></p>
+      <p>Screen Width: <span id="screen-width">Unknown</span></p>
+      <p>This content should change based on device type (mobile vs desktop)</p>
+    </div>
+    
+    <div class="test-section">
+      <h3>🔍 UTM Parameter Tests</h3>
+      <p>Current URL: <span id="current-url"></span></p>
+      <p>UTM Source: <span id="utm-source">None</span></p>
+      <p>UTM Campaign: <span id="utm-campaign">None</span></p>
+      <p>Add <code>?utm_source=google&utm_campaign=test</code> to URL to test UTM-based content replacement</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>📊 System Logs</h2>
+    <div id="logs" class="logs">Waiting for logs...</div>
+  </div>
+
+  <!-- Load the enhanced unified workflow system -->
+  <script src="/api/unified-workflow-system.js"></script>
+  
+  <script>
+    // Enhanced logging capture
+    const logsContainer = document.getElementById('logs');
+    const originalConsoleLog = console.log;
+    const originalConsoleError = console.error;
+    const originalConsoleWarn = console.warn;
+    
+    function addLog(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logLine = document.createElement('div');
+      logLine.innerHTML = `<span style="color: #888">[${timestamp}]</span> ${message}`;
+      
+      if (type === 'error') logLine.style.color = '#ff6b6b';
+      if (type === 'warn') logLine.style.color = '#ffa500';
+      if (type === 'success') logLine.style.color = '#28a745';
+      
+      logsContainer.appendChild(logLine);
+      logsContainer.scrollTop = logsContainer.scrollHeight;
+    }
+    
+    // Intercept console outputs
+    console.log = function(...args) {
+      originalConsoleLog.apply(console, args);
+      addLog(args.join(' '), 'info');
+    };
+    
+    console.error = function(...args) {
+      originalConsoleError.apply(console, args);
+      addLog(args.join(' '), 'error');
+    };
+    
+    console.warn = function(...args) {
+      originalConsoleWarn.apply(console, args);
+      addLog(args.join(' '), 'warn');
+    };
+    
+    // Initialize page info
+    document.addEventListener('DOMContentLoaded', function() {
+      // Update device info
+      const deviceType = window.innerWidth <= 768 ? 'mobile' : 'desktop';
+      document.getElementById('device-type').textContent = deviceType;
+      document.getElementById('screen-width').textContent = window.innerWidth + 'px';
+      
+      // Update URL info
+      document.getElementById('current-url').textContent = window.location.href;
+      
+      // Parse UTM parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const utmSource = urlParams.get('utm_source');
+      const utmCampaign = urlParams.get('utm_campaign');
+      
+      if (utmSource) document.getElementById('utm-source').textContent = utmSource;
+      if (utmCampaign) document.getElementById('utm-campaign').textContent = utmCampaign;
+      
+      addLog('🎯 Test page initialized with device type: ' + deviceType, 'info');
+      
+      // Check if workflow system loaded
+      setTimeout(() => {
+        if (window.workflowSystem) {
+          document.getElementById('status').innerHTML = `
+            <strong>Status:</strong> ✅ Enhanced workflow system loaded successfully!
+            <br><small>Debug mode enabled - check logs below for workflow execution details</small>
+          `;
+          document.getElementById('status').className = 'status success';
+          addLog('✅ Enhanced workflow system detected and ready', 'success');
+        } else {
+          document.getElementById('status').innerHTML = `
+            <strong>Status:</strong> ❌ Enhanced workflow system failed to load
+            <br><small>Check console for errors</small>
+          `;
+          document.getElementById('status').className = 'status error';
+          addLog('❌ Enhanced workflow system not found', 'error');
+        }
+      }, 2000);
+    });
+    
+    // Dynamic content management
+    let dynamicCounter = 0;
+    
+    function addDynamicContent() {
+      dynamicCounter++;
+      const container = document.getElementById('dynamic-container');
+      const newElement = document.createElement('div');
+      newElement.innerHTML = `
+        <button class="cta-button">Dynamic Button ${dynamicCounter}</button>
+        <p class="description">Dynamic description ${dynamicCounter}</p>
+        <a href="#" class="nav-link">Dynamic Link ${dynamicCounter}</a>
+      `;
+      container.appendChild(newElement);
+      addLog(`➕ Added dynamic content #${dynamicCounter}`, 'info');
+    }
+    
+    function removeDynamicContent() {
+      const container = document.getElementById('dynamic-container');
+      const children = container.children;
+      if (children.length > 1) {
+        container.removeChild(children[children.length - 1]);
+        addLog(`➖ Removed dynamic content`, 'info');
+      }
+    }
+    
+    // Test manual workflow trigger
+    function triggerTestWorkflow() {
+      if (window.workflowSystem) {
+        const testEvent = {
+          eventType: 'manual_test',
+          deviceType: window.innerWidth <= 768 ? 'mobile' : 'desktop',
+          timestamp: Date.now()
+        };
+        window.workflowSystem.handleEvent(testEvent);
+        addLog('🧪 Manual workflow trigger fired', 'info');
+      }
+    }
+    
+    // Monitor for workflow system initialization
+    let initCheckCount = 0;
+    const initChecker = setInterval(() => {
+      initCheckCount++;
+      
+      if (window.workflowSystem && window.workflowSystem.initialized) {
+        clearInterval(initChecker);
+        addLog(`🎉 Workflow system fully initialized after ${initCheckCount * 100}ms`, 'success');
+        
+        // Test manual content replacement
+        setTimeout(() => {
+          addLog('🧪 Testing manual content replacement...', 'info');
+          triggerTestWorkflow();
+        }, 1000);
+      } else if (initCheckCount > 100) { // 10 seconds
+        clearInterval(initChecker);
+        addLog('⏰ Workflow system initialization timeout', 'error');
+      }
+    }, 100);
+    
+    addLog('🚀 Test page script loaded, monitoring for workflow system...', 'info');
+  </script>
+</body>
+</html> 

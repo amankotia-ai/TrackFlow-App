@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirect Action Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .test-element {
+            padding: 10px;
+            margin: 10px 0;
+            background: #f5f5f5;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔄 Redirect Action Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Redirect Actions</h2>
+        <button onclick="testRedirectSameTab()">Test Same Tab Redirect</button>
+        <button onclick="testRedirectNewTab()">Test New Tab Redirect</button>
+        <button onclick="testRedirectWithDelay()">Test Redirect with 3s Delay</button>
+        <div id="test-results"></div>
+    </div>
+
+    <script src="src/utils/workflowExecutor.js"></script>
+    <script>
+        // Initialize workflow executor
+        const executor = new WorkflowExecutor({
+            debug: true,
+            executionDelay: 0
+        });
+
+        function testRedirectSameTab() {
+            console.log('🧪 Testing same tab redirect...');
+            const action = {
+                name: 'Redirect User',
+                config: {
+                    url: 'https://www.google.com',
+                    delay: 0,
+                    newTab: false
+                }
+            };
+            executor.executeAction(action);
+        }
+
+        function testRedirectNewTab() {
+            console.log('🧪 Testing new tab redirect...');
+            const action = {
+                name: 'Redirect User',
+                config: {
+                    url: 'https://www.github.com',
+                    delay: 0,
+                    newTab: true
+                }
+            };
+            executor.executeAction(action);
+        }
+
+        function testRedirectWithDelay() {
+            console.log('🧪 Testing redirect with 3 second delay...');
+            document.getElementById('test-results').innerHTML = '<p>⏳ Redirect will happen in 3 seconds...</p>';
+            
+            const action = {
+                name: 'Redirect User',
+                config: {
+                    url: 'https://www.example.com',
+                    delay: 3,
+                    newTab: true
+                }
+            };
+            executor.executeAction(action);
+        }
+
+        // Test legacy format transformation
+        function testLegacyFormat() {
+            console.log('🧪 Testing legacy format transformation...');
+            const legacyAction = {
+                type: 'redirect',
+                url: 'https://www.stackoverflow.com',
+                delay: 1,
+                newTab: true
+            };
+            executor.executeAction(legacyAction);
+        }
+
+        console.log('✅ Redirect Action Test Page Loaded');
+        console.log('🔧 WorkflowExecutor initialized with debug mode');
+    </script>
+</body>
+</html> 

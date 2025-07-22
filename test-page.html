@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ngrok Integration Test</title>
+  
+  <!-- Element Tracking Integration - Add to <head> section -->
+  <script>
+    // Auto-detect if running locally or via ngrok
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const baseUrl = isLocal ? 'http://localhost:3001' : 'https://trackflow-webapp-production.up.railway.app';
+    
+    // Tracking Configuration
+    window.ELEMENT_TRACKING_CONFIG = {
+      "workflowId": "element-tracking-demo",
+      "pageUrl": window.location.href,
+      "apiEndpoint": baseUrl + "/api/analytics/track",
+      "trackingScriptUrl": baseUrl + "/tracking-script.js",
+      "debug": true,
+      "autoTrack": true,
+      "customSelectors": []
+    };
+    
+    console.log('🌐 Detected environment:', isLocal ? 'Local' : 'External');
+    console.log('🔗 Using base URL:', baseUrl);
+  </script>
+
+  <!-- Element Tracking Script -->
+  <script>
+    // Element Tracker Script - Dynamically loaded from server
+    (function() {
+      // Prevent double loading
+      if (window.ElementTracker || window.elementTracker) {
+        console.log('🎯 Element Tracker already loaded');
+        return;
+      }
+      
+      const trackingScriptUrl = window.ELEMENT_TRACKING_CONFIG.trackingScriptUrl;
+      console.log('🎯 Loading Element Tracker from:', trackingScriptUrl);
+      
+      const script = document.createElement('script');
+      script.src = trackingScriptUrl;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      
+      script.onload = function() {
+        console.log('✅ Element Tracker script loaded successfully');
+      };
+      
+      script.onerror = function() {
+        console.error('❌ Failed to load Element Tracker script from:', trackingScriptUrl);
+        console.error('💡 Make sure your server is running on localhost:3001');
+      };
+      
+      document.head.appendChild(script);
+    })();
+  </script>
+  
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; line-height: 1.6; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .cta-button { 
+      background: #007cba; 
+      color: white; 
+      padding: 15px 30px; 
+      border: none; 
+      border-radius: 5px; 
+      font-size: 16px; 
+      cursor: pointer; 
+      margin: 10px; 
+      transition: background 0.3s;
+    }
+    .cta-button:hover { background: #005a87; }
+    .btn-primary { 
+      background: #28a745; 
+      color: white; 
+      padding: 12px 24px; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      margin: 5px;
+    }
+    .status { 
+      background: #f8f9fa; 
+      border: 1px solid #dee2e6; 
+      padding: 15px; 
+      border-radius: 5px; 
+      margin: 20px 0; 
+    }
+    .success { border-color: #28a745; background: #d4edda; }
+    .error { border-color: #dc3545; background: #f8d7da; }
+    form { background: #f9f9f9; padding: 20px; border-radius: 5px; margin: 20px 0; }
+    input, textarea { 
+      width: 100%; 
+      padding: 10px; 
+      margin: 5px 0; 
+      border: 1px solid #ddd; 
+      border-radius: 3px; 
+      box-sizing: border-box;
+    }
+    #special-offer-modal { 
+      display: none; 
+      position: fixed; 
+      top: 50%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      background: white; 
+      border: 2px solid #007cba; 
+      padding: 30px; 
+      border-radius: 10px; 
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
+      z-index: 1000; 
+    }
+    #progressive-fields { 
+      display: none; 
+      background: #e3f2fd; 
+      padding: 15px; 
+      border-radius: 5px; 
+      margin-top: 10px; 
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Ngrok Integration Test Page</h1>
+    
+    <div class="status" id="status">
+      <strong>Status:</strong> Testing ngrok integration...
+      <br><small>Check browser console (F12) for tracking messages</small>
+    </div>
+    
+    <section>
+      <h2>🎯 CTA Button Tests</h2>
+      <p>Click these buttons to test element click tracking:</p>
+      <button class="cta-button">Primary CTA Button</button>
+      <button class="btn-primary">Secondary CTA</button>
+      <button class="cta-button">Another CTA</button>
+    </section>
+    
+    <section>
+      <h2>📝 Form Interaction Test</h2>
+      <p>Focus on the email field to test form interaction tracking:</p>
+      <form>
+        <input type="text" name="name" placeholder="Your Name" required>
+        <input type="email" name="email" placeholder="Your Email (focus here!)" required>
+        <div id="progressive-fields">
+          <h4>🎉 Progressive Fields Appeared!</h4>
+          <input type="tel" name="phone" placeholder="Your Phone">
+          <textarea name="message" placeholder="Your Message" rows="3"></textarea>
+        </div>
+        <button type="submit" class="btn-primary">Submit Form</button>
+      </form>
+    </section>
+    
+    <section style="height: 1000px; background: linear-gradient(to bottom, #f0f0f0, #ffffff);">
+      <h2>📏 Scroll Test Area</h2>
+      <p>Scroll down to test element visibility tracking...</p>
+      <div style="margin-top: 500px;" class="content-section">
+        <h3>🎯 75% Scroll Point</h3>
+        <p>If you can see this, you've scrolled deep enough to trigger visibility events!</p>
+      </div>
+    </section>
+  </div>
+  
+  <!-- Hidden elements that can be shown by workflow actions -->
+  <div id="special-offer-modal">
+    <h3>🎉 Special Offer Triggered!</h3>
+    <p>This modal was triggered by your CTA click!</p>
+    <button onclick="this.parentElement.style.display='none'" class="btn-primary">Close</button>
+  </div>
+
+  <!-- Element Tracking Initialization - Add before closing </body> tag -->
+  <script>
+    // Initialize workflow-specific tracking
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.elementTracker) {
+        console.log('🎯 Workflow Integration: Initializing tracking for "Element Tracking Demo"');
+        
+        // Setup workflow trigger checking
+        setupWorkflowTriggers('element-tracking-demo');
+        
+        console.log('✅ Workflow Integration: Setup complete for "Element Tracking Demo"');
+        
+        // Update status
+        document.getElementById('status').innerHTML = `
+          <strong>Status:</strong> ✅ Element Tracker loaded and initialized!
+          <br><small>Interact with elements above and watch the console for tracking events</small>
+        `;
+        document.getElementById('status').className = 'status success';
+      } else {
+        console.error('❌ Element Tracker not found. Make sure the tracking script is loaded.');
+        document.getElementById('status').innerHTML = `
+          <strong>Status:</strong> ❌ Element Tracker failed to load
+          <br><small>Check the console for errors and verify ngrok is running</small>
+        `;
+        document.getElementById('status').className = 'status error';
+      }
+    });
+
+    // Function to check workflow triggers
+    function setupWorkflowTriggers(workflowId) {
+      if (!window.elementTracker) return;
+      
+      // Override the event processing to check triggers
+      const originalAddEvent = window.elementTracker.addEvent.bind(window.elementTracker);
+      
+      window.elementTracker.addEvent = function(event) {
+        // Call original event processing
+        originalAddEvent(event);
+        
+        // Check if this event should trigger any workflows
+        checkWorkflowTrigger(event, workflowId);
+      };
+    }
+    
+         // Check if an event should trigger workflow actions
+     async function checkWorkflowTrigger(event, workflowId) {
+       try {
+         const triggerUrl = window.ELEMENT_TRACKING_CONFIG.apiEndpoint.replace('/analytics/track', '/workflows/trigger-check');
+         const response = await fetch(triggerUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: event,
+            workflowId: workflowId
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.triggered && result.actions) {
+            console.log('🔄 Workflow Triggered:', result.actions);
+            executeWorkflowActions(result.actions);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Workflow trigger check failed:', error);
+      }
+    }
+    
+    // Execute workflow actions
+    function executeWorkflowActions(actions) {
+      actions.forEach(action => {
+        setTimeout(() => {
+          executeAction(action);
+        }, action.delay || 0);
+      });
+    }
+    
+    // Execute individual action
+    function executeAction(action) {
+      // Handle both old format (type/target) and new format (name/config)
+      const actionType = action.type || (action.name && action.name.toLowerCase().replace(/ /g, '_'));
+      const targetSelector = action.target || (action.config && action.config.selector);
+      
+      if (!targetSelector) {
+        console.warn('⚠️ Action missing target selector:', action);
+        return;
+      }
+      
+      const elements = document.querySelectorAll(targetSelector);
+      
+      if (elements.length === 0) {
+        console.warn('⚠️ Action target not found:', targetSelector);
+        return;
+      }
+      
+      console.log(`🎬 Executing action: ${actionType} on ${elements.length} element(s) - ${action.triggeredBy || 'Unknown trigger'}`);
+      
+      switch (actionType) {
+        case 'replace_text':
+          elements.forEach(element => {
+            const newText = action.newText || (action.config && action.config.newText);
+            const originalText = action.originalText || (action.config && action.config.originalText);
+            
+            if (originalText && element.textContent.includes(originalText)) {
+              element.textContent = element.textContent.replace(originalText, newText);
+            } else if (newText) {
+              element.textContent = newText;
+            }
+          });
+          break;
+          
+        case 'hide_element':
+          elements.forEach(element => {
+            const animation = action.animation || (action.config && action.config.animation) || 'fade';
+            if (animation === 'fade') {
+              element.style.transition = 'opacity 0.3s ease';
+              element.style.opacity = '0';
+              setTimeout(() => element.style.display = 'none', 300);
+            } else {
+              element.style.display = 'none';
+            }
+          });
+          break;
+          
+        case 'show_element':
+          elements.forEach(element => {
+            const animation = action.animation || (action.config && action.config.animation) || 'fade';
+            element.style.display = 'block';
+            if (animation === 'fade') {
+              element.style.opacity = '0';
+              element.style.transition = 'opacity 0.3s ease';
+              setTimeout(() => element.style.opacity = '1', 10);
+            }
+          });
+          break;
+          
+        case 'modify_css':
+          elements.forEach(element => {
+            const property = action.property || (action.config && action.config.property);
+            const value = action.value || (action.config && action.config.value);
+            if (property && value) {
+              element.style[property] = value;
+            }
+          });
+          break;
+          
+        case 'add_class':
+          elements.forEach(element => {
+            const className = action.className || (action.config && action.config.className);
+            if (className) {
+              element.classList.add(className);
+            }
+          });
+          break;
+          
+        case 'display_overlay':
+          const content = action.content || (action.config && action.config.content) || '<div>Overlay Content</div>';
+          const overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:10000;display:flex;align-items:center;justify-content:center;color:white;';
+          overlay.innerHTML = content;
+          overlay.onclick = () => overlay.remove();
+          document.body.appendChild(overlay);
+          break;
+          
+        default:
+          console.warn('⚠️ Unknown action type:', actionType);
+      }
+    }
+  </script>
+  
+  <script>
+    // Update the ngrok URL in the test page
+    setTimeout(() => {
+      const currentUrl = window.location.hostname;
+      if (currentUrl !== 'localhost' && currentUrl !== '127.0.0.1') {
+        console.log('🌐 Running on external domain:', currentUrl);
+      } else {
+        console.log('🏠 Running locally - ngrok test may not work as expected');
+      }
+    }, 1000);
+  </script>
+</body>
+</html> 

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Execution Tracking Fix</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-button {
+            background: #007cba;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .hero-title {
+            font-size: 2.5em;
+            color: #333;
+            text-align: center;
+        }
+        .console-output {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-title">Test Page for Execution Tracking</div>
+    
+    <div class="test-section">
+        <h2>🔧 Execution Tracking Fix Test</h2>
+        <p>This page tests that workflows only increment execution count by 1 per actual run.</p>
+        <p><strong>Expected behavior:</strong> Each workflow should track exactly once per trigger event.</p>
+        
+        <button class="test-button" onclick="triggerManualTest()">Trigger Manual Test</button>
+        <button class="test-button" onclick="addDynamicContent()">Add Dynamic Content</button>
+        <button class="test-button" onclick="clearConsole()">Clear Console</button>
+    </div>
+
+    <div class="test-section">
+        <h3>📊 Console Output:</h3>
+        <div id="console-output" class="console-output">
+            Console output will appear here...
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>🎯 Test Instructions:</h3>
+        <ol>
+            <li>Open browser DevTools console</li>
+            <li>Watch for execution tracking messages</li>
+            <li>Each workflow should only track once per actual trigger</li>
+            <li>Look for: <code>✅ Execution tracked successfully</code> messages</li>
+            <li>Verify no duplicate tracking for the same execution</li>
+        </ol>
+    </div>
+
+    <!-- Load the fixed unified workflow system -->
+    <script src="src/utils/unifiedWorkflowSystem.js"></script>
+
+    <script>
+        // Enhanced console logging to show in page
+        const consoleOutput = document.getElementById('console-output');
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+
+        function logToPage(message, type = 'log') {
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                log: '#00ff00',
+                warn: '#ffaa00', 
+                error: '#ff4444'
+            };
+            
+            consoleOutput.innerHTML += `<div style="color: ${colors[type]}">[${timestamp}] ${message}</div>`;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logToPage(args.join(' '), 'log');
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            logToPage(args.join(' '), 'warn');
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logToPage(args.join(' '), 'error');
+        };
+
+        // Test functions
+        function triggerManualTest() {
+            console.log('🧪 Manual test triggered - simulating workflow event');
+            
+            if (window.workflowSystem) {
+                // Simulate a manual event
+                window.workflowSystem.handleEvent({
+                    eventType: 'manual_test',
+                    timestamp: Date.now(),
+                    testId: Math.random().toString(36).substr(2, 9)
+                });
+            } else {
+                console.warn('⚠️ Workflow system not ready yet');
+            }
+        }
+
+        function addDynamicContent() {
+            console.log('🧪 Adding dynamic content to test mutation observer');
+            
+            const newElement = document.createElement('div');
+            newElement.className = 'hero-title';
+            newElement.textContent = 'Dynamic Content Added';
+            newElement.style.fontSize = '1.5em';
+            newElement.style.color = '#666';
+            newElement.style.marginTop = '20px';
+            
+            document.body.appendChild(newElement);
+        }
+
+        function clearConsole() {
+            consoleOutput.innerHTML = 'Console cleared...\n';
+        }
+
+        // Monitor workflow system readiness
+        function checkWorkflowSystem() {
+            if (window.workflowSystem) {
+                console.log('✅ Workflow system detected');
+                
+                // Monitor for execution tracking
+                const originalTrack = window.workflowSystem.trackWorkflowExecution;
+                if (originalTrack) {
+                    window.workflowSystem.trackWorkflowExecution = function(...args) {
+                        console.log('📊 TRACKING CALL DETECTED:', args[0]?.name || 'Unknown workflow');
+                        return originalTrack.apply(this, args);
+                    };
+                }
+            } else {
+                console.log('⏳ Waiting for workflow system...');
+                setTimeout(checkWorkflowSystem, 1000);
+            }
+        }
+
+        // Start monitoring
+        checkWorkflowSystem();
+
+        // Log page load completion
+        window.addEventListener('load', () => {
+            console.log('✅ Page fully loaded - workflow system should be ready');
+        });
+
+        console.log('🚀 Test page initialized - monitoring for execution tracking...');
+    </script>
+</body>
+</html> 

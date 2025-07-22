@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Unified Workflow System Test</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      max-width: 1200px; 
+      margin: 0 auto; 
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .hero-section {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px;
+      text-align: center;
+      border-radius: 10px;
+      margin: 20px 0;
+    }
+    .hero-headline {
+      font-size: 32px;
+      margin-bottom: 20px;
+    }
+    .cta-button {
+      background: #ff6b6b;
+      color: white;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 5px;
+      font-size: 18px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    .test-panel {
+      background: #f8f9fa;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border-left: 4px solid #007bff;
+    }
+    .status-panel {
+      background: #e3f2fd;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .log {
+      background: #1a1a1a;
+      color: #00ff00;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin: 10px 0;
+    }
+    .success { color: #4caf50; }
+    .warning { color: #ff9800; }
+    .error { color: #f44336; }
+    .info { color: #2196f3; }
+    .banner {
+      background: #ffeb3b;
+      color: #333;
+      padding: 15px;
+      text-align: center;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .hidden-element {
+      background: #e57373;
+      color: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .test-button {
+      background: #4caf50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      margin: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero-section">
+    <h1 class="hero-headline">Test Headline - Replace Me!</h1>
+    <p>This is a test page for the unified workflow system</p>
+    <button class="cta-button">Click to Get Started</button>
+  </div>
+
+  <div class="test-panel">
+    <h3>System Status</h3>
+    <div id="system-status" class="status-panel">Initializing...</div>
+  </div>
+
+  <div class="test-panel">
+    <h3>Test Elements</h3>
+    <div class="banner" id="test-banner">This banner can be hidden/shown</div>
+    <div class="hidden-element" id="hidden-element" style="display: none;">
+      This element is initially hidden
+    </div>
+    <button class="test-button" onclick="testElementClick()">Test Click Trigger</button>
+    <button class="test-button" onclick="testScrollDepth()">Test Scroll Trigger</button>
+    <button class="test-button" onclick="testExitIntent()">Test Exit Intent</button>
+  </div>
+
+  <div class="test-panel">
+    <h3>Manual Tests</h3>
+    <button class="test-button" onclick="testDeviceType()">Test Device Type</button>
+    <button class="test-button" onclick="testUTMParameters()">Test UTM Parameters</button>
+    <button class="test-button" onclick="testTimeOnPage()">Test Time on Page</button>
+    <button class="test-button" onclick="resetElements()">Reset Elements</button>
+  </div>
+
+  <div class="test-panel">
+    <h3>System Logs</h3>
+    <div id="logs" class="log"></div>
+  </div>
+
+  <!-- Include the unified workflow system -->
+  <script src="/api/unified-workflow-system.js"></script>
+  
+  <script>
+    // Override the unified system to add custom debug logging
+    window.addEventListener('DOMContentLoaded', () => {
+      // Wait a moment for the system to initialize
+      setTimeout(() => {
+        if (window.workflowSystem) {
+          // Override log function to display in our UI
+          const originalLog = window.workflowSystem.log.bind(window.workflowSystem);
+          window.workflowSystem.log = function(message, level = 'info') {
+            originalLog(message, level);
+            displayLog(message, level);
+          };
+          
+          // Force debug mode
+          window.workflowSystem.config.debug = true;
+          
+          updateSystemStatus();
+          
+          log('🎯 Unified Workflow System test page loaded', 'success');
+          log(`Device Type: ${window.workflowSystem.pageContext.deviceType}`, 'info');
+          log(`Session ID: ${window.workflowSystem.userContext.sessionId}`, 'info');
+          
+        } else {
+          log('❌ Unified Workflow System not found', 'error');
+        }
+      }, 1000);
+    });
+
+    function displayLog(message, level) {
+      const logsDiv = document.getElementById('logs');
+      const timestamp = new Date().toLocaleTimeString();
+      const className = level === 'error' ? 'error' : level === 'success' ? 'success' : level === 'warning' ? 'warning' : 'info';
+      logsDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+      logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+
+    function log(message, level = 'info') {
+      displayLog(message, level);
+    }
+
+    function updateSystemStatus() {
+      const statusDiv = document.getElementById('system-status');
+      
+      if (window.workflowSystem) {
+        const system = window.workflowSystem;
+        statusDiv.innerHTML = `
+          <strong>✅ System Status:</strong> ${system.initialized ? 'Ready' : 'Initializing'}<br>
+          <strong>📊 Workflows Loaded:</strong> ${system.workflows.size}<br>
+          <strong>📱 Device Type:</strong> ${system.pageContext.deviceType}<br>
+          <strong>🔗 Session ID:</strong> ${system.userContext.sessionId}<br>
+          <strong>🎯 Debug Mode:</strong> ${system.config.debug ? 'Enabled' : 'Disabled'}
+        `;
+      } else {
+        statusDiv.innerHTML = '❌ System not loaded';
+      }
+    }
+
+    // Test functions
+    function testElementClick() {
+      log('🧪 Simulating element click event', 'info');
+      if (window.workflowSystem) {
+        window.workflowSystem.handleEvent({
+          eventType: 'click',
+          elementSelector: '.test-button',
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    function testScrollDepth() {
+      log('🧪 Simulating scroll depth event', 'info');
+      if (window.workflowSystem) {
+        window.workflowSystem.handleEvent({
+          eventType: 'scroll',
+          scrollPercentage: 75,
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    function testExitIntent() {
+      log('🧪 Simulating exit intent event', 'info');
+      if (window.workflowSystem) {
+        window.workflowSystem.handleEvent({
+          eventType: 'exit_intent',
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    function testDeviceType() {
+      log('🧪 Testing device type trigger', 'info');
+      if (window.workflowSystem) {
+        // Temporarily change device type for testing
+        const originalType = window.workflowSystem.pageContext.deviceType;
+        window.workflowSystem.pageContext.deviceType = 'mobile';
+        
+        window.workflowSystem.handleEvent({
+          eventType: 'device_type_test',
+          deviceType: 'mobile',
+          timestamp: Date.now()
+        });
+        
+        // Restore original type
+        setTimeout(() => {
+          window.workflowSystem.pageContext.deviceType = originalType;
+        }, 1000);
+      }
+    }
+
+    function testUTMParameters() {
+      log('🧪 Testing UTM parameters trigger', 'info');
+      if (window.workflowSystem) {
+        // Add test UTM parameters
+        window.workflowSystem.pageContext.utm = {
+          utm_source: 'google',
+          utm_medium: 'cpc',
+          utm_campaign: 'test'
+        };
+        
+        window.workflowSystem.handleEvent({
+          eventType: 'utm_test',
+          utm: window.workflowSystem.pageContext.utm,
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    function testTimeOnPage() {
+      log('🧪 Testing time on page trigger', 'info');
+      if (window.workflowSystem) {
+        window.workflowSystem.handleEvent({
+          eventType: 'time_on_page',
+          timeOnPage: 60, // 60 seconds
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    function resetElements() {
+      log('🔄 Resetting test elements', 'info');
+      
+      // Reset headline
+      document.querySelector('.hero-headline').textContent = 'Test Headline - Replace Me!';
+      
+      // Reset banner
+      const banner = document.getElementById('test-banner');
+      banner.style.display = 'block';
+      banner.style.opacity = '1';
+      
+      // Reset hidden element
+      const hiddenElement = document.getElementById('hidden-element');
+      hiddenElement.style.display = 'none';
+      hiddenElement.style.opacity = '1';
+      
+      // Reset button text
+      document.querySelector('.cta-button').textContent = 'Click to Get Started';
+      
+      log('✅ Elements reset to initial state', 'success');
+    }
+
+    // Update status every few seconds
+    setInterval(updateSystemStatus, 5000);
+
+    // Add some extra spacing for scroll testing
+    document.body.innerHTML += `
+      <div style="height: 1000px; background: linear-gradient(to bottom, #f0f0f0, #ffffff); padding: 50px; text-align: center;">
+        <h3>Scroll down to test scroll depth triggers</h3>
+        <p>This section adds height to enable scroll testing.</p>
+        <p>Scroll percentage is calculated and sent to workflow system.</p>
+      </div>
+    `;
+  </script>
+</body>
+</html> 

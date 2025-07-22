@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real Workflow Test</title>
+  
+  <!-- Element Tracking Integration -->
+  <script>
+    // IMPORTANT: Replace this with your actual workflow ID from the database
+    const WORKFLOW_ID = '0861bb24-0005-40db-a8f2-0d5a012623bf'; // Your actual workflow ID
+    
+    // Tracking Configuration
+    window.ELEMENT_TRACKING_CONFIG = {
+      workflowId: WORKFLOW_ID, // Use the real workflow ID here
+      pageUrl: window.location.href,
+      apiEndpoint: "https://trackflow-webapp-production.up.railway.app/api/analytics/track",
+      workflowEndpoint: "https://trackflow-webapp-production.up.railway.app",
+      debug: true,
+      autoTrack: true,
+      customSelectors: []
+    };
+    
+    console.log('🎯 Using real workflow ID:', WORKFLOW_ID);
+  </script>
+  
+  <!-- Load the ENHANCED tracking script with workflow support -->
+  <script src="https://trackflow-webapp-production.up.railway.app/enhanced-tracking-script.js"></script>
+  
+  <!-- Also load the workflow executor -->
+  <script src="https://trackflow-webapp-production.up.railway.app/workflow-executor.js"></script>
+  
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .hero-headline {
+      font-size: 32px;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .cta-button {
+      background: #007bff;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    .cta-button:hover {
+      background: #0056b3;
+    }
+    .info-box {
+      background: #e3f2fd;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+    .device-info {
+      background: #f0f0f0;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="hero-headline">Real Workflow Test Page</h1>
+    
+    <div class="info-box">
+      <h3>Workflow Configuration</h3>
+      <p><strong>Workflow ID:</strong> <code id="workflow-id"></code></p>
+      <p><strong>Status:</strong> <span id="status">Initializing...</span></p>
+      <p><strong>Device Type:</strong> <span id="device-type">Detecting...</span></p>
+    </div>
+    
+    <div>
+      <h3>Test Your Workflow Triggers</h3>
+      <p>Create a workflow with triggers that match these elements:</p>
+      
+      <button class="cta-button">Primary CTA Button</button>
+      <button class="btn btn-primary">Secondary Button</button>
+      
+      <div style="margin: 20px 0;">
+        <input type="email" placeholder="Enter your email" style="padding: 8px; width: 250px;">
+      </div>
+      
+      <div class="device-info">
+        <strong>Current Device:</strong> <span id="current-device"></span><br>
+        <strong>Page Visits:</strong> <span id="visit-count">0</span><br>
+        <strong>Time on Page:</strong> <span id="time-on-page">0</span> seconds
+      </div>
+    </div>
+    
+    <div style="margin-top: 30px;">
+      <h3>How to Test</h3>
+      <ol>
+        <li>Replace the WORKFLOW_ID in the source code with your actual workflow ID from the database</li>
+        <li>Create a workflow with triggers like:
+          <ul>
+            <li>Device Type trigger (mobile/desktop)</li>
+            <li>Element Click trigger (selector: .cta-button)</li>
+            <li>Time on Page trigger (e.g., 10 seconds)</li>
+          </ul>
+        </li>
+        <li>Add actions like:
+          <ul>
+            <li>Replace Text (selector: .hero-headline)</li>
+            <li>Show/Hide Element</li>
+            <li>Modify CSS</li>
+          </ul>
+        </li>
+        <li>Activate the workflow and set target URL to * or this page's URL</li>
+        <li>Interact with the page and watch the console for trigger events</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    // Display configuration
+    document.getElementById('workflow-id').textContent = window.ELEMENT_TRACKING_CONFIG.workflowId;
+    
+    // Detect device type
+    const deviceType = window.innerWidth <= 768 ? 'mobile' : 'desktop';
+    document.getElementById('device-type').textContent = deviceType;
+    document.getElementById('current-device').textContent = deviceType;
+    
+    // Track time on page
+    let timeOnPage = 0;
+    setInterval(() => {
+      timeOnPage++;
+      document.getElementById('time-on-page').textContent = timeOnPage;
+    }, 1000);
+    
+    // Track page visits
+    const visits = parseInt(localStorage.getItem('workflow_test_visits') || '0') + 1;
+    localStorage.setItem('workflow_test_visits', visits.toString());
+    document.getElementById('visit-count').textContent = visits;
+    
+    // Check initialization
+    setTimeout(() => {
+      if (window.elementTracker) {
+        document.getElementById('status').textContent = '✅ Tracker initialized';
+        document.getElementById('status').style.color = 'green';
+        
+        // Log some debug info
+        console.log('🎯 Element Tracker:', window.elementTracker);
+        console.log('🎯 Session ID:', window.elementTracker.sessionId);
+        console.log('🎯 Workflow Executor:', window.elementTracker.workflowExecutor);
+      } else {
+        document.getElementById('status').textContent = '❌ Tracker failed to initialize';
+        document.getElementById('status').style.color = 'red';
+      }
+    }, 2000);
+    
+    // Monitor fetch requests for debugging
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      const url = args[0];
+      if (url.includes('/workflows/')) {
+        console.log('🔍 Workflow API call:', url);
+      }
+      return originalFetch.apply(this, args).then(response => {
+        if (url.includes('/workflows/trigger-check')) {
+          response.clone().json().then(data => {
+            console.log('🔍 Trigger check response:', data);
+          }).catch(() => {});
+        }
+        return response;
+      });
+    };
+  </script>
+</body>
+</html> 

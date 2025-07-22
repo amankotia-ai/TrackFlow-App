@@ -1,0 +1,64 @@
+<!-- TEMPORARY WEBFLOW FIX - Use this until Railway deployment is fixed -->
+<!-- Replace your current integration with this: -->
+
+<head>
+  <!-- Step 1: Set up ngrok tunnel -->
+  <!-- Run in terminal: ngrok http 3001 -->
+  <!-- Copy the HTTPS URL (e.g., https://abc123.ngrok.io) -->
+  
+  <!-- Step 2: Configure anti-flicker settings -->
+  <script>
+    // Configure anti-flicker settings
+    window.unifiedWorkflowConfig = {
+      maxHideTime: 5000,
+      showLoadingIndicator: true,
+      debug: true,
+      hideMethod: 'opacity'
+    };
+  </script>
+  
+  <!-- Step 3: Load scripts from ngrok tunnel -->
+  <!-- REPLACE 'YOUR_NGROK_URL' with your actual ngrok URL -->
+  <script src="YOUR_NGROK_URL/api/anti-flicker.js"></script>
+  <script src="YOUR_NGROK_URL/api/unified-workflow-system.js"></script>
+  
+  <!-- Step 4: Initialize with your API key -->
+  <script>
+    setTimeout(() => {
+      if (window.UnifiedWorkflowSystem) {
+        window.workflowSystem = new UnifiedWorkflowSystem({
+          apiKey: 'wf_1a1e7aa820b99ee517c48cb9b05b9e4773e1a26e90d2dcef2761769fd22692ae',
+          apiEndpoint: 'YOUR_NGROK_URL', // Replace with your ngrok URL
+          debug: true
+        });
+        console.log('✅ Workflow system initialized with ngrok tunnel');
+      } else {
+        console.error('❌ UnifiedWorkflowSystem not loaded from ngrok tunnel');
+      }
+    }, 1000);
+  </script>
+  
+  <!-- Step 5: Test the workflow -->
+  <!-- Visit: https://manks.webflow.io/untitled?utm_source=google -->
+  <!-- Should see: Text ".h1" changes to "Just this" -->
+  <!-- Should see: Button "a.button" gets hidden -->
+</head>
+
+<!-- INSTRUCTIONS TO SET UP NGROK: -->
+<!-- 
+1. Install ngrok: npm install -g ngrok
+2. Start your local server: node railway-server.js  
+3. In another terminal: ngrok http 3001
+4. Copy the HTTPS URL (e.g., https://abc123.ngrok.io)
+5. Replace 'YOUR_NGROK_URL' in the code above with your ngrok URL
+6. Add this code to your Webflow site's custom code (head section)
+7. Test with: https://manks.webflow.io/untitled?utm_source=google
+-->
+
+<!-- YOUR WORKFLOW WILL: -->
+<!-- 
+✅ Trigger when utm_source=google
+✅ Replace text in .h1 with "Just this"  
+✅ Hide button with selector a.button
+✅ Show debug logs in browser console
+--> 

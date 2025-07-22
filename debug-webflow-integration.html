@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Debug Webflow Integration</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .debug-panel { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    .workflow-data { background: #fff; padding: 15px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; }
+    .trigger-test { background: #e3f2fd; padding: 15px; margin: 10px 0; border-radius: 4px; }
+    .error { background: #ffebee; color: #c62828; padding: 10px; border-radius: 4px; }
+    .success { background: #e8f5e9; color: #2e7d32; padding: 10px; border-radius: 4px; }
+    .warning { background: #fff3e0; color: #ef6c00; padding: 10px; border-radius: 4px; }
+    pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    .test-elements { margin: 20px 0; }
+    .hero-headline { font-size: 24px; color: #333; margin: 10px 0; }
+    .cta-button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Debug Webflow Integration</h1>
+  
+  <div class="debug-panel">
+    <h3>Configuration</h3>
+    <div id="config-display"></div>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Workflow Status</h3>
+    <div id="workflow-status">Loading...</div>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Active Workflows</h3>
+    <div id="workflows-display">Loading...</div>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Test Elements</h3>
+    <div class="test-elements">
+      <h2 class="hero-headline">Test Headline - Replace Me!</h2>
+      <button class="cta-button">Test Button</button>
+      <p class="description">Test description text</p>
+    </div>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Manual Tests</h3>
+    <button onclick="testDeviceTrigger()">Test Device Type Trigger</button>
+    <button onclick="testDirectWorkflow()">Test Direct Workflow Fetch</button>
+    <button onclick="testTriggerCheck()">Test Trigger Check</button>
+    <button onclick="testActionFormats()">Test Action Format Compatibility</button>
+    <button onclick="testBothExecutionPaths()">Test Both Execution Paths</button>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Action Format Analysis</h3>
+    <div id="action-format-analysis"></div>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Logs</h3>
+    <div id="logs"></div>
+  </div>
+
+  <!-- INTEGRATION CODE -->
+  <script>
+    // Configuration
+    window.WORKFLOW_CONFIG = {
+      workflowId: '0861bb24-0005-40db-a8f2-0d5a012623bf',
+      apiEndpoint: 'https://trackflow-webapp-production.up.railway.app',
+      debug: true
+    };
+
+    // Log function
+    function log(message, type = 'info') {
+      console.log(message);
+      const logsDiv = document.getElementById('logs');
+      const timestamp = new Date().toLocaleTimeString();
+      const logClass = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : '';
+      logsDiv.innerHTML += `<div class="${logClass}">[${timestamp}] ${message}</div>`;
+      logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+
+    // Display configuration
+    document.getElementById('config-display').innerHTML = `
+      <pre>${JSON.stringify(window.WORKFLOW_CONFIG, null, 2)}</pre>
+      <p><strong>Device Type:</strong> ${window.innerWidth <= 768 ? 'Mobile' : 'Desktop'}</p>
+      <p><strong>Page URL:</strong> ${window.location.href}</p>
+    `;
+
+    // Debug workflow executor
+    class DebugWorkflowExecutor {
+      constructor() {
+        this.config = window.WORKFLOW_CONFIG;
+        this.deviceType = window.innerWidth <= 768 ? 'mobile' : 'desktop';
+        this.workflows = [];
+        
+        log('🎯 Debug Workflow Executor: Starting...', 'info');
+        log(`Device Type: ${this.deviceType}`, 'info');
+        
+        this.init();
+      }
+
+      async init() {
+        try {
+          await this.fetchActiveWorkflows();
+          await this.testDirectWorkflowFetch();
+          await this.processImmediateTriggers();
+          log('✅ Debug Workflow Executor: Initialization complete', 'success');
+        } catch (error) {
+          log(`❌ Initialization failed: ${error.message}`, 'error');
+        }
+      }
+
+      async fetchActiveWorkflows() {
+        try {
+          const url = `${this.config.apiEndpoint}/api/workflows/active?url=${encodeURIComponent(window.location.href)}`;
+          log(`📡 Fetching active workflows from: ${url}`, 'info');
+          
+          const response = await fetch(url);
+          const data = await response.json();
+          
+          log(`Response: ${JSON.stringify(data, null, 2)}`, 'info');
+          
+          if (data.success && data.workflows) {
+            this.workflows = data.workflows;
+            document.getElementById('workflows-display').innerHTML = `
+              <div class="success">Found ${data.workflows.length} active workflows</div>
+              <pre>${JSON.stringify(data.workflows, null, 2)}</pre>
+            `;
+            
+            if (data.workflows.length === 0) {
+              document.getElementById('workflow-status').innerHTML = `
+                <div class="warning">⚠️ No active workflows found. This could mean:</div>
+                <ul>
+                  <li>Your workflow is not activated in the dashboard</li>
+                  <li>The workflow status is not 'active'</li>
+                  <li>The target URL doesn't match this page</li>
+                  <li>The workflow doesn't exist in the database</li>
+                </ul>
+              `;
+            }
+          } else {
+            document.getElementById('workflows-display').innerHTML = `
+              <div class="error">Failed to fetch workflows: ${JSON.stringify(data)}</div>
+            `;
+          }
+        } catch (error) {
+          log(`❌ Failed to fetch active workflows: ${error.message}`, 'error');
+          document.getElementById('workflows-display').innerHTML = `
+            <div class="error">Error: ${error.message}</div>
+          `;
+        }
+      }
+
+      async testDirectWorkflowFetch() {
+        try {
+          log('🔍 Testing direct workflow trigger check...', 'info');
+          
+          const response = await fetch(`${this.config.apiEndpoint}/api/workflows/trigger-check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workflowId: this.config.workflowId,
+              event: {
+                deviceType: this.deviceType,
+                eventType: 'page_load',
+                visitCount: 1,
+                timeOnPage: 0,
+                scrollPercentage: 0
+              }
+            })
+          });
+
+          const result = await response.json();
+          log(`Trigger check result: ${JSON.stringify(result, null, 2)}`, 'info');
+
+          if (!result.success) {
+            document.getElementById('workflow-status').innerHTML = `
+              <div class="error">❌ Trigger check failed: ${result.error || 'Unknown error'}</div>
+            `;
+          } else if (!result.triggered) {
+            document.getElementById('workflow-status').innerHTML = `
+              <div class="warning">⚠️ Workflow exists but triggers didn't match</div>
+              <p>This means your workflow is in the database but the trigger conditions aren't being met.</p>
+              <p>Check your trigger configuration in the dashboard.</p>
+            `;
+          } else {
+            document.getElementById('workflow-status').innerHTML = `
+              <div class="success">✅ Workflow triggered successfully with ${result.actions.length} actions</div>
+            `;
+            
+            // Execute the actions
+            if (result.actions && result.actions.length > 0) {
+              this.executeActions(result.actions);
+            }
+          }
+        } catch (error) {
+          log(`❌ Direct workflow test failed: ${error.message}`, 'error');
+        }
+      }
+
+      async processImmediateTriggers() {
+        log('🔍 Processing immediate triggers...', 'info');
+        
+        for (const workflow of this.workflows) {
+          log(`Processing workflow: ${workflow.name}`, 'info');
+          
+          const nodes = workflow.nodes || [];
+          const connections = workflow.connections || [];
+          
+          log(`Workflow has ${nodes.length} nodes and ${connections.length} connections`, 'info');
+          
+          const triggerNodes = nodes.filter(node => node.type === 'trigger');
+          log(`Found ${triggerNodes.length} trigger nodes`, 'info');
+          
+          for (const trigger of triggerNodes) {
+            log(`Evaluating trigger: ${trigger.name}`, 'info');
+            let shouldTrigger = false;
+            
+            switch (trigger.name) {
+              case 'Device Type':
+                shouldTrigger = this.deviceType === trigger.config.deviceType;
+                log(`Device Type trigger: ${this.deviceType} === ${trigger.config.deviceType} = ${shouldTrigger}`, shouldTrigger ? 'success' : 'warning');
+                break;
+                
+              case 'Page Visits':
+                shouldTrigger = true; // Always trigger for testing
+                log(`Page Visits trigger: ${shouldTrigger}`, shouldTrigger ? 'success' : 'warning');
+                break;
+                
+              default:
+                log(`Unknown trigger type: ${trigger.name}`, 'warning');
+            }
+            
+            if (shouldTrigger) {
+              log(`✅ Trigger matched: ${trigger.name}`, 'success');
+              await this.executeConnectedActions(workflow, trigger, nodes, connections);
+            }
+          }
+        }
+      }
+
+      async executeConnectedActions(workflow, trigger, nodes, connections) {
+        const connectedActionIds = connections
+          .filter(conn => conn.sourceNodeId === trigger.id)
+          .map(conn => conn.targetNodeId);
+        
+        log(`Found ${connectedActionIds.length} connected actions`, 'info');
+        
+        const connectedActions = nodes.filter(node => 
+          node.type === 'action' && connectedActionIds.includes(node.id)
+        );
+        
+        for (const action of connectedActions) {
+          await this.executeAction(action);
+        }
+      }
+
+      async executeAction(action) {
+        log(`⚡ Executing action: ${action.name}`, 'info');
+        log(`Action config: ${JSON.stringify(action.config)}`, 'info');
+        
+        switch (action.name) {
+          case 'Replace Text':
+            this.executeReplaceText(action.config);
+            break;
+          case 'Hide Element':
+            this.executeHideElement(action.config);
+            break;
+          case 'Show Element':
+            this.executeShowElement(action.config);
+            break;
+          case 'Modify CSS':
+            this.executeModifyCSS(action.config);
+            break;
+          default:
+            log(`⚠️ Unknown action type: ${action.name}`, 'warning');
+        }
+      }
+
+      executeReplaceText(config) {
+        const elements = document.querySelectorAll(config.selector);
+        log(`🎬 Replace Text: Found ${elements.length} elements for "${config.selector}"`, 'info');
+        
+        if (elements.length === 0) {
+          log(`❌ No elements found for selector: ${config.selector}`, 'error');
+          return;
+        }
+        
+        elements.forEach(element => {
+          const oldText = element.textContent;
+          
+          if (config.originalText && element.textContent.includes(config.originalText)) {
+            element.textContent = element.textContent.replace(config.originalText, config.newText);
+          } else {
+            element.textContent = config.newText;
+          }
+          
+          log(`✅ Text replaced: "${oldText}" → "${element.textContent}"`, 'success');
+        });
+      }
+
+      executeHideElement(config) {
+        const elements = document.querySelectorAll(config.selector);
+        log(`🎬 Hide Element: Found ${elements.length} elements for "${config.selector}"`, 'info');
+        
+        elements.forEach(element => {
+          element.style.display = 'none';
+          log(`✅ Element hidden`, 'success');
+        });
+      }
+
+      executeShowElement(config) {
+        const elements = document.querySelectorAll(config.selector);
+        log(`🎬 Show Element: Found ${elements.length} elements for "${config.selector}"`, 'info');
+        
+        elements.forEach(element => {
+          element.style.display = 'block';
+          log(`✅ Element shown`, 'success');
+        });
+      }
+
+      executeModifyCSS(config) {
+        const elements = document.querySelectorAll(config.selector);
+        log(`🎬 Modify CSS: Found ${elements.length} elements for "${config.selector}"`, 'info');
+        
+        elements.forEach(element => {
+          element.style[config.property] = config.value;
+          log(`✅ CSS modified: ${config.property} = ${config.value}`, 'success');
+        });
+      }
+
+      executeActions(actions) {
+        log(`Executing ${actions.length} actions from trigger check`, 'info');
+        
+        actions.forEach(action => {
+          const elements = document.querySelectorAll(action.target);
+          log(`Action ${action.type}: Found ${elements.length} elements for "${action.target}"`, 'info');
+          
+          if (elements.length === 0) {
+            log(`❌ No elements found for action target: ${action.target}`, 'error');
+            return;
+          }
+          
+          elements.forEach(element => {
+            switch (action.type) {
+              case 'replace_text':
+                const oldText = element.textContent;
+                element.textContent = action.newText;
+                log(`✅ Text replaced: "${oldText}" → "${action.newText}"`, 'success');
+                break;
+              case 'hide_element':
+                element.style.display = 'none';
+                log(`✅ Element hidden`, 'success');
+                break;
+              case 'show_element':
+                element.style.display = 'block';
+                log(`✅ Element shown`, 'success');
+                break;
+              default:
+                log(`⚠️ Unknown action type: ${action.type}`, 'warning');
+            }
+          });
+        });
+      }
+    }
+
+    // Manual test functions
+    async function testDeviceTrigger() {
+      log('🧪 Manual device trigger test', 'info');
+      const executor = new DebugWorkflowExecutor();
+    }
+
+    async function testDirectWorkflow() {
+      log('🧪 Manual direct workflow test', 'info');
+      
+      try {
+        const response = await fetch(`${window.WORKFLOW_CONFIG.apiEndpoint}/api/workflows/active?url=${encodeURIComponent(window.location.href)}`);
+        const data = await response.json();
+        log(`Direct fetch result: ${JSON.stringify(data, null, 2)}`, 'info');
+      } catch (error) {
+        log(`❌ Direct fetch failed: ${error.message}`, 'error');
+      }
+    }
+
+    async function testTriggerCheck() {
+      log('🧪 Manual trigger check test', 'info');
+      
+      try {
+        const response = await fetch(`${window.WORKFLOW_CONFIG.apiEndpoint}/api/workflows/trigger-check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: window.WORKFLOW_CONFIG.workflowId,
+            event: {
+              deviceType: window.innerWidth <= 768 ? 'mobile' : 'desktop',
+              eventType: 'manual_test'
+            }
+          })
+        });
+
+        const result = await response.json();
+        log(`Manual trigger check result: ${JSON.stringify(result, null, 2)}`, 'info');
+      } catch (error) {
+        log(`❌ Manual trigger check failed: ${error.message}`, 'error');
+      }
+    }
+
+    async function testActionFormats() {
+      log('🧪 Testing action format compatibility', 'info');
+      
+      // Test database format action
+      const databaseAction = {
+        id: 'test-action-1',
+        type: 'action',
+        name: 'Replace Text',
+        config: {
+          selector: '.hero-headline',
+          newText: 'Database Format Test!',
+          originalText: 'Test Headline'
+        }
+      };
+      
+      // Test legacy format action
+      const legacyAction = {
+        type: 'replace_text',
+        target: '.hero-headline',
+        newText: 'Legacy Format Test!',
+        originalText: 'Test Headline',
+        animation: 'fade'
+      };
+      
+      const analysis = document.getElementById('action-format-analysis');
+      analysis.innerHTML = `
+        <h4>Database Format Action:</h4>
+        <pre>${JSON.stringify(databaseAction, null, 2)}</pre>
+        <h4>Legacy Format Action:</h4>
+        <pre>${JSON.stringify(legacyAction, null, 2)}</pre>
+      `;
+      
+      // Test transformation if WorkflowExecutor is available
+      if (window.WorkflowExecutor) {
+        const executor = new window.WorkflowExecutor({ debug: true });
+        
+        log('Testing database format transformation:', 'info');
+        const transformedDb = executor.transformActionToStandard(databaseAction);
+        log(`Transformed database action: ${JSON.stringify(transformedDb, null, 2)}`, 'info');
+        
+        log('Testing legacy format transformation:', 'info');
+        const transformedLegacy = executor.transformActionToStandard(legacyAction);
+        log(`Transformed legacy action: ${JSON.stringify(transformedLegacy, null, 2)}`, 'info');
+        
+        analysis.innerHTML += `
+          <h4>Transformed Database Format:</h4>
+          <pre>${JSON.stringify(transformedDb, null, 2)}</pre>
+          <h4>Transformed Legacy Format:</h4>
+          <pre>${JSON.stringify(transformedLegacy, null, 2)}</pre>
+        `;
+      }
+    }
+
+    async function testBothExecutionPaths() {
+      log('🧪 Testing both execution paths', 'info');
+      
+      // Path 1: Direct WorkflowExecutor (new system)
+      log('Testing Path 1: Direct WorkflowExecutor', 'info');
+      try {
+        const executor = new DebugWorkflowExecutor();
+        await executor.testDirectWorkflowFetch();
+      } catch (error) {
+        log(`❌ Path 1 failed: ${error.message}`, 'error');
+      }
+      
+      // Path 2: Server trigger-check (legacy system)
+      log('Testing Path 2: Server trigger-check', 'info');
+      try {
+        await testTriggerCheck();
+      } catch (error) {
+        log(`❌ Path 2 failed: ${error.message}`, 'error');
+      }
+      
+      log('✅ Both execution paths tested', 'success');
+    }
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        new DebugWorkflowExecutor();
+      });
+    } else {
+      new DebugWorkflowExecutor();
+    }
+  </script>
+</body>
+</html> 

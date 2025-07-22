@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Embedded Tracking</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; background: #007cba; color: white; border: none; cursor: pointer; }
+        .test-area { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 5px; }
+        .log { background: #2d2d2d; color: #f8f8f2; padding: 15px; margin: 10px 0; border-radius: 5px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Embedded Tracking Test</h1>
+    
+    <div class="test-area">
+        <h3>Test Elements:</h3>
+        <button id="test-btn-1">Test Button 1</button>
+        <button id="test-btn-2">Test Button 2</button>
+        <a href="#" id="test-link">Test Link</a>
+        
+        <form id="test-form">
+            <input type="text" placeholder="Test Input" name="test-input">
+            <button type="submit">Submit Form</button>
+        </form>
+    </div>
+
+    <div class="log" id="log">
+        <strong>Event Log:</strong><br>
+        <div id="log-content"></div>
+    </div>
+
+    <!-- Embedded Element Tracking -->
+    <script>
+        // Configuration
+        window.ELEMENT_TRACKING_CONFIG = {
+            "workflowId": "embedded-test",
+            "pageUrl": window.location.href,
+            "apiEndpoint": "https://5b0112725db4.ngrok-free.app/api/analytics/track",
+            "debug": true,
+            "autoTrack": true,
+            "customSelectors": [],
+            "webflowMode": false
+        };
+
+        console.log('🎯 Element Tracker: Starting embedded test...');
+
+        // Simple embedded tracker for testing
+        (function() {
+            'use strict';
+            
+            class EmbeddedTracker {
+                constructor(config = {}) {
+                    this.config = { ...window.ELEMENT_TRACKING_CONFIG, ...config };
+                    this.eventQueue = [];
+                    this.sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    this.logElement = document.getElementById('log-content');
+                    this.init();
+                }
+
+                init() {
+                    console.log('🎯 Embedded Tracker initialized');
+                    this.log('✅ Tracker initialized');
+                    this.trackPageView();
+                    this.setupEventListeners();
+                    this.startEventProcessing();
+                }
+
+                log(message) {
+                    if (this.logElement) {
+                        this.logElement.innerHTML += '<br>' + new Date().toLocaleTimeString() + ': ' + message;
+                        this.logElement.scrollTop = this.logElement.scrollHeight;
+                    }
+                    console.log(message);
+                }
+
+                trackPageView() {
+                    this.addEvent({
+                        type: 'page_view',
+                        timestamp: new Date().toISOString(),
+                        page: window.location.pathname,
+                        url: window.location.href,
+                        title: document.title
+                    });
+                    this.log('📊 Page view tracked');
+                }
+
+                setupEventListeners() {
+                    // Track clicks
+                    document.addEventListener('click', (event) => {
+                        this.trackElementEvent(event, 'click');
+                    });
+
+                    // Track form submissions
+                    document.addEventListener('submit', (event) => {
+                        event.preventDefault(); // Prevent actual submission for testing
+                        this.trackElementEvent(event, 'form_submit');
+                        this.log('📝 Form submission prevented for testing');
+                    });
+
+                    // Track input changes
+                    document.addEventListener('input', (event) => {
+                        if (event.target.tagName === 'INPUT') {
+                            this.trackElementEvent(event, 'input_change');
+                        }
+                    });
+
+                    this.log('🎧 Event listeners set up');
+                }
+
+                trackElementEvent(event, eventType) {
+                    const element = event.target;
+                    const elementInfo = this.getElementInfo(element);
+                    
+                    this.addEvent({
+                        type: eventType,
+                        timestamp: new Date().toISOString(),
+                        element: elementInfo,
+                        page: window.location.pathname,
+                        url: window.location.href
+                    });
+
+                    this.log(`🎯 ${eventType} on ${elementInfo.tagName}${elementInfo.id ? '#' + elementInfo.id : ''}`);
+                }
+
+                getElementInfo(element) {
+                    return {
+                        tagName: element.tagName.toLowerCase(),
+                        id: element.id || null,
+                        className: element.className || null,
+                        textContent: element.textContent ? element.textContent.trim().substring(0, 50) : null,
+                        href: element.href || null,
+                        type: element.type || null,
+                        name: element.name || null
+                    };
+                }
+
+                addEvent(eventData) {
+                    const event = {
+                        ...eventData,
+                        sessionId: this.sessionId,
+                        workflowId: this.config.workflowId,
+                        timestamp: eventData.timestamp || new Date().toISOString()
+                    };
+
+                    this.eventQueue.push(event);
+                    
+                    if (this.config.debug) {
+                        console.log('🎯 Event queued:', event);
+                    }
+                }
+
+                startEventProcessing() {
+                    setInterval(() => {
+                        if (this.eventQueue.length > 0) {
+                            this.sendEvents();
+                        }
+                    }, 5000);
+                    this.log('⏰ Event processing started (5s intervals)');
+                }
+
+                sendEvents() {
+                    const events = [...this.eventQueue];
+                    this.eventQueue = [];
+
+                    this.log(`📤 Sending ${events.length} events to ${this.config.apiEndpoint}`);
+
+                    fetch(this.config.apiEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ events })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        this.log('✅ Events sent successfully');
+                        if (this.config.debug) {
+                            console.log('📊 Response:', data);
+                        }
+                    })
+                    .catch(error => {
+                        this.log('❌ Failed to send events: ' + error.message);
+                        console.error('❌ Send error:', error);
+                        // Re-add events to queue for retry
+                        this.eventQueue.unshift(...events);
+                    });
+                }
+            }
+
+            // Initialize the tracker
+            window.embeddedTracker = new EmbeddedTracker();
+            
+            // Debug helper
+            window.debugTracker = function() {
+                console.log('🔍 Tracker Debug Info:');
+                console.log('Session ID:', window.embeddedTracker.sessionId);
+                console.log('Config:', window.embeddedTracker.config);
+                console.log('Event Queue:', window.embeddedTracker.eventQueue);
+                window.embeddedTracker.log('🔍 Debug info logged to console');
+            };
+
+            console.log('✅ Embedded Tracker ready!');
+
+        })();
+    </script>
+
+    <script>
+        // Add some test interactions
+        document.addEventListener('DOMContentLoaded', function() {
+            const log = document.getElementById('log-content');
+            log.innerHTML = 'Tracker loading...';
+            
+            // Add debug button
+            const debugBtn = document.createElement('button');
+            debugBtn.textContent = 'Debug Tracker';
+            debugBtn.onclick = () => window.debugTracker();
+            document.querySelector('.test-area').appendChild(debugBtn);
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .debug-panel {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .test-content {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+        }
+        .log {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 300px;
+            overflow-y: scroll;
+            margin-top: 10px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.warning { background: #fff3cd; color: #856404; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        h1.h1 { color: #333; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="debug-panel">
+        <h2>🐛 Workflow Debug Panel</h2>
+        <p>This page helps debug why your workflow isn't executing. Check the logs below.</p>
+        
+        <div>
+            <button onclick="testWorkflowSystem()">🧪 Test Workflow System</button>
+            <button onclick="testElementSelector()">🎯 Test Element Selector</button>
+            <button onclick="testUTMTrigger()">🔗 Test UTM Trigger</button>
+            <button onclick="manualExecution()">⚡ Manual Execution</button>
+            <button onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+        
+        <div id="status-display"></div>
+        <div class="log" id="debug-log"></div>
+    </div>
+
+    <div class="test-content">
+        <h1 class="h1" id="target-text">Title copy goes here</h1>
+        <p>This is the target element for the workflow. It should change when the workflow executes.</p>
+        <p><strong>Current URL:</strong> <span id="current-url"></span></p>
+        <p><strong>UTM Source:</strong> <span id="utm-source"></span></p>
+        <p><strong>Element Found:</strong> <span id="element-status"></span></p>
+    </div>
+
+    <!-- Load the unified workflow system with debug enabled -->
+    <script src="https://trackflow-webapp-production.up.railway.app/api/unified-workflow-system.js"></script>
+    
+    <script>
+        // Debug logging function
+        function debugLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('debug-log');
+            const colorMap = {
+                info: '#00ff00',
+                warning: '#ffaa00',
+                error: '#ff4444',
+                success: '#00ff88'
+            };
+            
+            logElement.innerHTML += `<div style="color: ${colorMap[type] || '#00ff00'}">[${timestamp}] ${message}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // Status update function
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status-display');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        // Page initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('🚀 Page loaded, starting debug session...', 'info');
+            
+            // Display current page info
+            document.getElementById('current-url').textContent = window.location.href;
+            
+            // Check UTM parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const utmSource = urlParams.get('utm_source') || 'none';
+            document.getElementById('utm-source').textContent = utmSource;
+            
+            // Check if target element exists
+            const targetElement = document.querySelector('h1.h1');
+            document.getElementById('element-status').textContent = targetElement ? 'Found ✅' : 'Not Found ❌';
+            
+            if (targetElement) {
+                debugLog(`✅ Target element found: ${targetElement.tagName}.${targetElement.className}`, 'success');
+            } else {
+                debugLog('❌ Target element h1.h1 not found!', 'error');
+            }
+            
+            // Wait for workflow system and configure debug mode
+            setTimeout(() => {
+                if (window.workflowSystem) {
+                    window.workflowSystem.config.debug = true;
+                    debugLog('🔧 Debug mode enabled on unified system', 'success');
+                    
+                    // Log workflow system status
+                    debugLog(`📊 Workflows loaded: ${window.workflowSystem.workflows.size}`, 'info');
+                    debugLog(`📱 Device type: ${window.workflowSystem.pageContext.deviceType}`, 'info');
+                    debugLog(`🔗 Current URL: ${window.workflowSystem.pageContext.url}`, 'info');
+                    debugLog(`🏷️ UTM parameters: ${JSON.stringify(window.workflowSystem.pageContext.utm)}`, 'info');
+                    
+                    updateStatus('Workflow system loaded and debug mode enabled', 'success');
+                } else {
+                    debugLog('❌ Workflow system not found!', 'error');
+                    updateStatus('Workflow system failed to load', 'error');
+                }
+            }, 3000);
+        });
+
+        // Test functions
+        function testWorkflowSystem() {
+            debugLog('🧪 Testing workflow system...', 'info');
+            
+            if (!window.workflowSystem) {
+                debugLog('❌ Workflow system not loaded', 'error');
+                return;
+            }
+            
+            debugLog(`📊 Workflows: ${window.workflowSystem.workflows.size}`, 'info');
+            debugLog(`🔧 Debug: ${window.workflowSystem.config.debug}`, 'info');
+            debugLog(`🔑 API Key: ${window.workflowSystem.config.apiKey ? 'Set' : 'Not set'}`, 'info');
+            
+            // Show loaded workflows
+            if (window.workflowSystem.workflows.size > 0) {
+                window.workflowSystem.workflows.forEach((workflow, id) => {
+                    debugLog(`📋 Workflow: ${workflow.name} (${workflow.is_active ? 'active' : 'inactive'})`, 'info');
+                    debugLog(`  - Nodes: ${workflow.nodes?.length || 0}`, 'info');
+                    debugLog(`  - Connections: ${workflow.connections?.length || 0}`, 'info');
+                });
+            } else {
+                debugLog('⚠️ No workflows loaded', 'warning');
+            }
+        }
+
+        function testElementSelector() {
+            debugLog('🎯 Testing element selector h1.h1...', 'info');
+            
+            const elements = document.querySelectorAll('h1.h1');
+            debugLog(`Found ${elements.length} elements with selector 'h1.h1'`, 'info');
+            
+            elements.forEach((el, index) => {
+                debugLog(`  Element ${index + 1}: "${el.textContent.trim()}"`, 'info');
+            });
+            
+            // Test alternative selectors
+            const alternatives = ['h1', '.h1', '#target-text', 'h1#target-text'];
+            alternatives.forEach(selector => {
+                const els = document.querySelectorAll(selector);
+                debugLog(`Alternative selector '${selector}': ${els.length} elements`, 'info');
+            });
+        }
+
+        function testUTMTrigger() {
+            debugLog('🔗 Testing UTM trigger...', 'info');
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const utmSource = urlParams.get('utm_source');
+            
+            debugLog(`Current utm_source: ${utmSource || 'none'}`, 'info');
+            debugLog(`Expected: google`, 'info');
+            debugLog(`Match: ${utmSource === 'google' ? 'YES ✅' : 'NO ❌'}`, utmSource === 'google' ? 'success' : 'warning');
+            
+            if (utmSource !== 'google') {
+                debugLog('💡 Add ?utm_source=google to the URL to trigger the workflow', 'warning');
+            }
+        }
+
+        function manualExecution() {
+            debugLog('⚡ Manually executing text replacement...', 'info');
+            
+            const targetElement = document.querySelector('h1.h1');
+            if (targetElement) {
+                const oldText = targetElement.textContent;
+                targetElement.textContent = 'dfewfefwe';
+                debugLog(`✅ Text changed from "${oldText}" to "dfewfefwe"`, 'success');
+                updateStatus('Manual execution successful - text changed!', 'success');
+            } else {
+                debugLog('❌ Target element not found for manual execution', 'error');
+                updateStatus('Manual execution failed - element not found', 'error');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('debug-log').innerHTML = '';
+            document.getElementById('status-display').innerHTML = '';
+        }
+
+        // Override console.log to capture unified system logs
+        const originalConsoleLog = console.log;
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            
+            // Capture workflow system logs
+            const message = args.join(' ');
+            if (message.includes('🎯') || message.includes('⚡') || message.includes('📡') || message.includes('✅') || message.includes('❌')) {
+                debugLog(`[SYSTEM] ${message}`, 'info');
+            }
+        };
+
+        // Trigger manual test after URL is set correctly
+        if (window.location.search.includes('utm_source=google')) {
+            setTimeout(() => {
+                debugLog('🔄 UTM parameter detected, testing workflow trigger...', 'info');
+                if (window.workflowSystem) {
+                    // Force trigger evaluation
+                    window.workflowSystem.handleEvent({
+                        eventType: 'page_load',
+                        utm_source: 'google'
+                    });
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html> 

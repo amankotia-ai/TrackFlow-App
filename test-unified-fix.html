@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified Workflow System - Fix Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .status-panel {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #28a745;
+        }
+        
+        .error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        
+        .warning {
+            border-left-color: #ffc107;
+            background: #fffbf0;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .test-button:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .log-output {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        .success { color: #48bb78; }
+        .error-text { color: #f56565; }
+        .warning-text { color: #ed8936; }
+        .info { color: #4299e1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Unified Workflow System - Fix Test</h1>
+        <p>Testing the fix for the null reference error in the unified workflow system.</p>
+        
+        <div class="status-panel" id="statusPanel">
+            <h3>🔄 System Status</h3>
+            <div id="statusContent">Loading...</div>
+        </div>
+        
+        <div class="test-controls">
+            <h3>🧪 Test Functions</h3>
+            <button class="test-button" onclick="testSystemStatus()">Check System Status</button>
+            <button class="test-button" onclick="testDocumentReady()">Test Document Ready</button>
+            <button class="test-button" onclick="testContentHide()">Test Content Hide/Show</button>
+            <button class="test-button" onclick="clearLogs()">Clear Logs</button>
+        </div>
+        
+        <div class="log-output" id="logOutput">
+            <div class="info">🚀 Test page loaded - waiting for unified workflow system...</div>
+        </div>
+    </div>
+
+    <!-- Load the fixed unified workflow system -->
+    <script src="https://trackflow-webapp-production.up.railway.app/api/unified-workflow-system.js"></script>
+    
+    <script>
+        // Test functions
+        function log(message, type = 'info') {
+            const logOutput = document.getElementById('logOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error-text' : 
+                             type === 'warning' ? 'warning-text' : 
+                             type === 'success' ? 'success' : 'info';
+            
+            logOutput.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function testSystemStatus() {
+            log('🔍 Testing system status...', 'info');
+            
+            if (typeof window.workflowSystem !== 'undefined') {
+                log('✅ Unified workflow system loaded successfully', 'success');
+                log(`🎯 System initialized: ${window.workflowSystem.initialized}`, 'info');
+                log(`📊 Workflows loaded: ${window.workflowSystem.workflows?.size || 0}`, 'info');
+                log(`🔧 Debug mode: ${window.workflowSystem.config?.debug}`, 'info');
+            } else {
+                log('❌ Unified workflow system not found', 'error');
+            }
+        }
+
+        function testDocumentReady() {
+            log('🔍 Testing document ready state...', 'info');
+            log(`📄 Document ready state: ${document.readyState}`, 'info');
+            log(`🏗️ Document body exists: ${!!document.body}`, document.body ? 'success' : 'error');
+            log(`👁️ Body visibility: ${document.body?.style.visibility || 'default'}`, 'info');
+        }
+
+        function testContentHide() {
+            if (window.workflowSystem) {
+                log('🔍 Testing content hide/show functionality...', 'info');
+                
+                try {
+                    // Test hide
+                    window.workflowSystem.hideContent();
+                    log('✅ Hide content called successfully', 'success');
+                    
+                    // Test show after 2 seconds
+                    setTimeout(() => {
+                        window.workflowSystem.showContent();
+                        log('✅ Show content called successfully', 'success');
+                    }, 2000);
+                } catch (error) {
+                    log(`❌ Error testing content hide/show: ${error.message}`, 'error');
+                }
+            } else {
+                log('❌ Workflow system not available for testing', 'error');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logOutput').innerHTML = '';
+            log('🧹 Logs cleared', 'info');
+        }
+
+        function updateStatus() {
+            const statusContent = document.getElementById('statusContent');
+            const statusPanel = document.getElementById('statusPanel');
+            
+            if (typeof window.workflowSystem !== 'undefined') {
+                statusPanel.className = 'status-panel';
+                statusContent.innerHTML = `
+                    <strong>✅ System Loaded Successfully</strong><br>
+                    Initialized: ${window.workflowSystem.initialized}<br>
+                    Workflows: ${window.workflowSystem.workflows?.size || 0}<br>
+                    Debug: ${window.workflowSystem.config?.debug}<br>
+                    Content Hidden: ${window.workflowSystem.contentHidden}
+                `;
+            } else {
+                statusPanel.className = 'status-panel warning';
+                statusContent.innerHTML = '<strong>⏳ Loading System...</strong><br>Please wait while the unified workflow system loads.';
+            }
+        }
+
+        // Monitor system loading
+        let checkCount = 0;
+        const maxChecks = 50; // 10 seconds max
+        
+        function checkSystem() {
+            checkCount++;
+            updateStatus();
+            
+            if (typeof window.workflowSystem !== 'undefined') {
+                log('✅ Unified workflow system detected and loaded!', 'success');
+                log('🎉 No null reference errors detected - fix successful!', 'success');
+                
+                // Test the fixed functionality
+                setTimeout(() => {
+                    testSystemStatus();
+                    testDocumentReady();
+                }, 1000);
+            } else if (checkCount < maxChecks) {
+                setTimeout(checkSystem, 200);
+            } else {
+                log('❌ Timeout waiting for unified workflow system', 'error');
+                document.getElementById('statusPanel').className = 'status-panel error';
+                document.getElementById('statusContent').innerHTML = '<strong>❌ System Failed to Load</strong><br>The unified workflow system did not load within the timeout period.';
+            }
+        }
+
+        // Start monitoring
+        setTimeout(checkSystem, 100);
+
+        // Global error handler to catch any remaining errors
+        window.addEventListener('error', function(event) {
+            log(`❌ JavaScript Error: ${event.message}`, 'error');
+            log(`📍 File: ${event.filename}:${event.lineno}`, 'error');
+        });
+
+        log('🚀 Test page initialized', 'success');
+    </script>
+</body>
+</html> 

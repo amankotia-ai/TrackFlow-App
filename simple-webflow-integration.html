@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Simple Webflow Integration Test</title>
+</head>
+<body>
+  <h1 class="hero-headline">Test Headline</h1>
+  <button class="cta-button">Click Me</button>
+  <p class="description">This is a test description</p>
+
+  <!-- SIMPLE WEBFLOW INTEGRATION -->
+  
+  <!-- HEAD CODE (Add to Webflow Custom Code > Head) -->
+  <script>
+    // Simple configuration
+    window.WORKFLOW_CONFIG = {
+      workflowId: '0861bb24-0005-40db-a8f2-0d5a012623bf', // Replace with your workflow ID
+      apiEndpoint: 'https://trackflow-webapp-production.up.railway.app',
+      debug: true
+    };
+    
+    console.log('🎯 Simple Workflow Integration: Starting...');
+  </script>
+
+  <!-- BODY CODE (Add to Webflow Custom Code > Before </body> tag) -->
+  <script>
+    (function() {
+      'use strict';
+      
+      // Simple workflow executor
+      class SimpleWorkflowExecutor {
+        constructor() {
+          this.config = window.WORKFLOW_CONFIG;
+          this.sessionId = 'session_' + Date.now();
+          this.deviceType = window.innerWidth <= 768 ? 'mobile' : 'desktop';
+          this.workflows = [];
+          
+          if (this.config.debug) {
+            console.log('🎯 Simple Workflow Executor: Initialized');
+            console.log('🎯 Device Type:', this.deviceType);
+            console.log('🎯 Session ID:', this.sessionId);
+          }
+          
+          this.init();
+        }
+        
+        async init() {
+          try {
+            // Fetch workflows
+            await this.fetchWorkflows();
+            
+            // Process immediate triggers (page load, device type)
+            await this.processImmediateTriggers();
+            
+            // Set up event listeners
+            this.setupEventListeners();
+            
+            console.log('✅ Simple Workflow Executor: Ready');
+          } catch (error) {
+            console.error('❌ Simple Workflow Executor: Failed to initialize:', error);
+          }
+        }
+        
+        async fetchWorkflows() {
+          try {
+            const response = await fetch(`${this.config.apiEndpoint}/api/workflows/active?url=${encodeURIComponent(window.location.href)}`);
+            const data = await response.json();
+            
+            if (data.success && data.workflows) {
+              this.workflows = data.workflows;
+              console.log(`🎯 Loaded ${this.workflows.length} active workflows`);
+            }
+          } catch (error) {
+            console.error('❌ Failed to fetch workflows:', error);
+          }
+        }
+        
+        async processImmediateTriggers() {
+          for (const workflow of this.workflows) {
+            const nodes = workflow.nodes || [];
+            const connections = workflow.connections || [];
+            
+            // Find trigger nodes
+            const triggerNodes = nodes.filter(node => node.type === 'trigger');
+            
+            for (const trigger of triggerNodes) {
+              let shouldTrigger = false;
+              
+              // Evaluate trigger
+              switch (trigger.name) {
+                case 'Device Type':
+                  shouldTrigger = this.deviceType === trigger.config.deviceType;
+                  if (this.config.debug) {
+                    console.log(`🔍 Device Type trigger: ${this.deviceType} === ${trigger.config.deviceType} = ${shouldTrigger}`);
+                  }
+                  break;
+                  
+                case 'Page Visits':
+                  // Always trigger for page visits (you can add logic for visit count)
+                  shouldTrigger = true;
+                  if (this.config.debug) {
+                    console.log(`🔍 Page Visits trigger: ${shouldTrigger}`);
+                  }
+                  break;
+              }
+              
+              if (shouldTrigger) {
+                console.log(`✅ Trigger matched: ${trigger.name}`);
+                await this.executeConnectedActions(workflow, trigger, nodes, connections);
+              }
+            }
+          }
+        }
+        
+        async executeConnectedActions(workflow, trigger, nodes, connections) {
+          // Find actions connected to this trigger
+          const connectedActionIds = connections
+            .filter(conn => conn.sourceNodeId === trigger.id)
+            .map(conn => conn.targetNodeId);
+          
+          const connectedActions = nodes.filter(node => 
+            node.type === 'action' && connectedActionIds.includes(node.id)
+          );
+          
+          for (const action of connectedActions) {
+            await this.executeAction(action);
+          }
+        }
+        
+        async executeAction(action) {
+          console.log(`⚡ Executing action: ${action.name}`, action.config);
+          
+          switch (action.name) {
+            case 'Replace Text':
+              this.executeReplaceText(action.config);
+              break;
+              
+            case 'Hide Element':
+              this.executeHideElement(action.config);
+              break;
+              
+            case 'Show Element':
+              this.executeShowElement(action.config);
+              break;
+              
+            case 'Modify CSS':
+              this.executeModifyCSS(action.config);
+              break;
+              
+            default:
+              console.warn(`⚠️ Unknown action: ${action.name}`);
+          }
+        }
+        
+        executeReplaceText(config) {
+          const elements = document.querySelectorAll(config.selector);
+          console.log(`🎬 Replace Text: Found ${elements.length} elements for "${config.selector}"`);
+          
+          elements.forEach(element => {
+            const oldText = element.textContent;
+            
+            if (config.originalText && element.textContent.includes(config.originalText)) {
+              element.textContent = element.textContent.replace(config.originalText, config.newText);
+            } else {
+              element.textContent = config.newText;
+            }
+            
+            console.log(`✅ Text replaced: "${oldText}" → "${element.textContent}"`);
+          });
+        }
+        
+        executeHideElement(config) {
+          const elements = document.querySelectorAll(config.selector);
+          console.log(`🎬 Hide Element: Found ${elements.length} elements for "${config.selector}"`);
+          
+          elements.forEach(element => {
+            element.style.display = 'none';
+            console.log(`✅ Element hidden:`, element);
+          });
+        }
+        
+        executeShowElement(config) {
+          const elements = document.querySelectorAll(config.selector);
+          console.log(`🎬 Show Element: Found ${elements.length} elements for "${config.selector}"`);
+          
+          elements.forEach(element => {
+            element.style.display = 'block';
+            console.log(`✅ Element shown:`, element);
+          });
+        }
+        
+        executeModifyCSS(config) {
+          const elements = document.querySelectorAll(config.selector);
+          console.log(`🎬 Modify CSS: Found ${elements.length} elements for "${config.selector}"`);
+          
+          elements.forEach(element => {
+            element.style[config.property] = config.value;
+            console.log(`✅ CSS modified: ${config.property} = ${config.value}`);
+          });
+        }
+        
+        setupEventListeners() {
+          // Set up click tracking for buttons
+          document.addEventListener('click', (event) => {
+            const element = event.target;
+            if (element.matches('.cta-button, button, .btn')) {
+              console.log('🖱️ Button clicked:', element.className);
+              this.processClickTriggers(element);
+            }
+          });
+        }
+        
+        async processClickTriggers(clickedElement) {
+          for (const workflow of this.workflows) {
+            const nodes = workflow.nodes || [];
+            const connections = workflow.connections || [];
+            
+            // Find click trigger nodes
+            const clickTriggers = nodes.filter(node => 
+              node.type === 'trigger' && node.name === 'Element Click'
+            );
+            
+            for (const trigger of clickTriggers) {
+              if (clickedElement.matches(trigger.config.selector)) {
+                console.log(`✅ Click trigger matched: ${trigger.config.selector}`);
+                await this.executeConnectedActions(workflow, trigger, nodes, connections);
+              }
+            }
+          }
+        }
+      }
+      
+      // Initialize when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          new SimpleWorkflowExecutor();
+        });
+      } else {
+        new SimpleWorkflowExecutor();
+      }
+    })();
+  </script>
+
+  <!-- Test the integration -->
+  <script>
+    setTimeout(() => {
+      console.log('🧪 Testing workflow integration after 3 seconds...');
+      
+      // Simulate device type trigger
+      if (window.innerWidth <= 768) {
+        console.log('📱 Mobile device detected - workflows should trigger');
+      } else {
+        console.log('🖥️ Desktop device detected - workflows should trigger');
+      }
+    }, 3000);
+  </script>
+
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    .hero-headline { font-size: 32px; color: #333; margin: 20px 0; }
+    .cta-button { background: #007bff; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin: 10px 0; }
+    .description { font-size: 18px; color: #666; margin: 20px 0; }
+  </style>
+</body>
+</html> 

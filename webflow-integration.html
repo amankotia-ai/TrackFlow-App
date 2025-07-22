@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Webflow Integration Code</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
+    .code-section { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .copy-btn { background: #007cba; color: white; padding: 10px 15px; border: none; border-radius: 3px; cursor: pointer; }
+    pre { background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 5px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>🌐 Webflow Integration Code</h1>
+  
+  <div class="warning">
+    <strong>⚠️ Important:</strong> Make sure your ngrok tunnel is running with: <code>ngrok http 3001</code>
+    <br>Replace <code>5b0112725db4.ngrok-free.app</code> with your actual ngrok URL below.
+    <br><br>
+    <strong>🔧 Ngrok Browser Warning:</strong> If you see ngrok browser warnings, use the <strong>Embedded Integration</strong> method below instead of the external script loading method.
+  </div>
+
+  <h2>📝 Step 1: Add to Webflow Head Section</h2>
+  <p>Go to Webflow Project Settings → Custom Code → Head Code and paste:</p>
+  
+  <div class="code-section">
+    <button class="copy-btn" onclick="copyToClipboard('head-code')">Copy Head Code</button>
+    <pre id="head-code"><!-- Element Tracking Integration - Webflow Head Section -->
+<script>
+  // Enhanced Webflow Integration with Debug Logging and ngrok Support
+  console.log('🎯 Element Tracker: Starting Webflow integration...');
+  
+  // Configuration
+  window.ELEMENT_TRACKING_CONFIG = {
+    "workflowId": "element-tracking-demo",
+    "pageUrl": window.location.href,
+    "apiEndpoint": "https://5b0112725db4.ngrok-free.app/api/analytics/track",
+    "trackingScriptUrl": "https://5b0112725db4.ngrok-free.app/tracking-script.js",
+    "debug": true,
+    "autoTrack": true,
+    "customSelectors": [],
+    "webflowMode": true
+  };
+  
+  console.log('🔧 Config loaded:', window.ELEMENT_TRACKING_CONFIG);
+  
+  // Enhanced script loader with ngrok and Webflow compatibility
+  (function() {
+    // Prevent double loading
+    if (window.ElementTracker || window.elementTracker) {
+      console.log('🎯 Element Tracker already loaded');
+      return;
+    }
+    
+    console.log('🌐 Loading from ngrok:', window.ELEMENT_TRACKING_CONFIG.trackingScriptUrl);
+    
+    // Multiple loading strategies for Webflow compatibility
+    let loadingAttempt = 0;
+    const maxAttempts = 3;
+    
+    function attemptScriptLoad() {
+      loadingAttempt++;
+      console.log(`🔄 Loading attempt ${loadingAttempt}/${maxAttempts}`);
+      
+      if (loadingAttempt === 1) {
+        // Strategy 1: JSONP-style loading (DEFAULT - most reliable for ngrok/CSP)
+        console.log('📡 Strategy 1: JSONP-style loading (bypasses ngrok warnings)');
+        window.elementTrackerCallback = function(scriptContent) {
+          try {
+            console.log('✅ JSONP callback received script, length:', scriptContent.length);
+            new Function(scriptContent)();
+            checkScriptLoaded();
+          } catch (error) {
+            console.error('❌ Strategy 1 execution failed:', error);
+            setTimeout(attemptScriptLoad, 1000);
+          }
+        };
+        
+        // Create a script that calls our callback
+        const script = document.createElement('script');
+        script.src = window.ELEMENT_TRACKING_CONFIG.trackingScriptUrl + '?callback=elementTrackerCallback&t=' + Date.now();
+        script.onerror = () => {
+          console.warn('❌ Strategy 1 (JSONP) failed');
+          setTimeout(attemptScriptLoad, 1000);
+        };
+        document.head.appendChild(script);
+        
+      } else if (loadingAttempt === 2) {
+        // Strategy 2: Direct fetch and execute
+        console.log('📡 Strategy 2: Fetch and execute');
+        fetch(window.ELEMENT_TRACKING_CONFIG.trackingScriptUrl + '?bust=' + Date.now() + '&ngrok-skip-browser-warning=true', {
+          method: 'GET',
+          mode: 'cors',
+          cache: 'no-cache',
+          headers: {
+            'Accept': 'application/javascript, text/javascript, */*',
+            'ngrok-skip-browser-warning': 'true'
+          }
+        })
+        .then(response => {
+          console.log('📡 Fetch response:', response.status, response.headers.get('content-type'));
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then(scriptContent => {
+          console.log('✅ Script fetched, length:', scriptContent.length);
+          console.log('📋 First 100 chars:', scriptContent.substring(0, 100));
+          
+          // Check if we got HTML instead of JavaScript
+          if (scriptContent.trim().startsWith('<') || scriptContent.includes('<!DOCTYPE')) {
+            throw new Error('Received HTML instead of JavaScript - likely ngrok browser warning page');
+          }
+          
+          console.log('🚀 Executing script...');
+          // Use Function constructor to avoid eval
+          new Function(scriptContent)();
+          checkScriptLoaded();
+        })
+        .catch(error => {
+          console.warn('❌ Strategy 2 failed:', error.message);
+          setTimeout(attemptScriptLoad, 1000);
+        });
+        
+      } else if (loadingAttempt === 3) {
+        // Strategy 3: Script tag with cache busting (fallback)
+        console.log('📡 Strategy 3: Script tag with cache busting (final fallback)');
+        const script = document.createElement('script');
+        script.src = window.ELEMENT_TRACKING_CONFIG.trackingScriptUrl + '?cb=' + Date.now() + '&ngrok-skip-browser-warning=true';
+        script.async = false; // Load synchronously for Webflow
+        script.defer = false;
+        script.crossOrigin = 'anonymous';
+        script.type = 'text/javascript';
+        
+        script.onload = () => {
+          console.log('✅ Script tag loaded');
+          checkScriptLoaded();
+        };
+        
+        script.onerror = () => {
+          console.error('❌ All strategies failed');
+          showFinalError();
+        };
+        
+        document.head.appendChild(script);
+        
+      } else {
+        showFinalError();
+      }
+    }
+    
+    function checkScriptLoaded() {
+      setTimeout(() => {
+        if (window.elementTracker || window.ElementTracker) {
+          console.log('✅ ElementTracker loaded successfully!');
+          // Trigger a custom event to notify other scripts
+          window.dispatchEvent(new CustomEvent('elementTrackerReady'));
+        } else {
+          console.warn('⚠️ Script loaded but ElementTracker not found');
+          if (loadingAttempt < maxAttempts) {
+            setTimeout(attemptScriptLoad, 1000);
+          } else {
+            showFinalError();
+          }
+        }
+      }, 500);
+    }
+    
+    function showFinalError() {
+      console.error('❌ All loading strategies failed');
+      console.error('💡 Manual troubleshooting steps:');
+      console.error('  1. Verify ngrok is running: ngrok http 3001');
+      console.error('  2. Test script URL directly:', window.ELEMENT_TRACKING_CONFIG.trackingScriptUrl);
+      console.error('  3. Check Webflow site settings for CSP restrictions');
+      console.error('  4. Try adding the script to a test page first');
+      console.error('  5. Check browser network tab for specific error details');
+    }
+    
+    // Start the loading process
+    attemptScriptLoad();
+    
+  })();
+</script></pre>
+  </div>
+
+  <h2>📝 Step 2: Add to Webflow Footer Section</h2>
+  <p>Go to Webflow Project Settings → Custom Code → Footer Code and paste:</p>
+  
+  <div class="code-section">
+    <button class="copy-btn" onclick="copyToClipboard('footer-code')">Copy Footer Code</button>
+    <pre id="footer-code"><!-- Element Tracking Initialization - Webflow Footer Section -->
+<script>
+  // Wait for both DOM and tracking script to be ready
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎯 DOM loaded, checking for ElementTracker...');
+    
+    // Function to initialize tracking
+    function initializeTracking() {
+      if (window.elementTracker) {
+        console.log('🎯 Webflow Integration: Initializing tracking for "Element Tracking Demo"');
+        
+        // Setup workflow trigger checking
+        setupWebflowWorkflowTriggers('element-tracking-demo');
+        
+        console.log('✅ Webflow Integration: Setup complete');
+        
+        // Test tracking with a page view
+        if (window.elementTracker.addEvent) {
+          window.elementTracker.addEvent({
+            type: 'page_view',
+            timestamp: new Date().toISOString(),
+            page: window.location.pathname,
+            device: window.innerWidth > 768 ? 'desktop' : 'mobile'
+          });
+          console.log('📊 Initial page view tracked');
+        }
+        
+        return true;
+      }
+      return false;
+    }
+    
+    // Try to initialize immediately
+    if (!initializeTracking()) {
+      console.log('⏳ ElementTracker not ready, waiting...');
+      
+      // Poll for ElementTracker with timeout
+      let attempts = 0;
+      const maxAttempts = 50; // 5 seconds max
+      
+      const checkInterval = setInterval(() => {
+        attempts++;
+        
+        if (initializeTracking()) {
+          clearInterval(checkInterval);
+          console.log('✅ ElementTracker initialized after', attempts, 'attempts');
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          console.error('❌ ElementTracker failed to load after 5 seconds');
+          console.error('💡 Check the Head Code section and ngrok tunnel');
+        }
+      }, 100);
+    }
+  });
+
+  // Enhanced workflow trigger setup for Webflow
+  function setupWebflowWorkflowTriggers(workflowId) {
+    if (!window.elementTracker) {
+      console.error('❌ ElementTracker not available for workflow setup');
+      return;
+    }
+    
+    console.log('🔧 Setting up Webflow workflow triggers...');
+    
+    // Override the event processing to check triggers
+    const originalAddEvent = window.elementTracker.addEvent.bind(window.elementTracker);
+    
+    window.elementTracker.addEvent = function(event) {
+      // Call original event processing
+      originalAddEvent(event);
+      
+      // Check if this event should trigger any workflows
+      checkWebflowWorkflowTrigger(event, workflowId);
+    };
+    
+    console.log('✅ Workflow triggers configured');
+  }
+  
+  // Enhanced workflow trigger checking for Webflow
+  async function checkWebflowWorkflowTrigger(event, workflowId) {
+    try {
+      const triggerUrl = window.ELEMENT_TRACKING_CONFIG.apiEndpoint.replace('/analytics/track', '/workflows/trigger-check');
+      
+      console.log('🔄 Checking workflow trigger for:', event.type);
+      
+      const response = await fetch(triggerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          event: event,
+          workflowId: workflowId
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.triggered && result.actions) {
+          console.log('🎬 Workflow Triggered! Actions:', result.actions);
+          executeWebflowWorkflowActions(result.actions);
+        }
+      } else {
+        console.warn('⚠️ Workflow trigger check failed:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Workflow trigger check error:', error);
+    }
+  }
+  
+  // Execute workflow actions in Webflow environment
+  function executeWebflowWorkflowActions(actions) {
+    console.log('🎭 Executing', actions.length, 'workflow actions...');
+    
+    actions.forEach((action, index) => {
+      setTimeout(() => {
+        executeWebflowAction(action);
+      }, action.delay || (index * 100)); // Stagger actions
+    });
+  }
+  
+  // Execute individual action in Webflow
+  function executeWebflowAction(action) {
+    const elements = document.querySelectorAll(action.target);
+    
+    if (elements.length === 0) {
+      console.warn('⚠️ Webflow Action target not found:', action.target);
+      return;
+    }
+    
+    console.log(`🎬 Executing Webflow action: ${action.type} on ${elements.length} element(s)`);
+    
+    elements.forEach(element => {
+      switch (action.type) {
+        case 'show_element':
+          element.style.display = 'block';
+          if (action.animation === 'fade') {
+            element.style.opacity = '0';
+            element.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => { element.style.opacity = '1'; }, 10);
+          }
+          console.log('✅ Webflow Action executed: Show element');
+          break;
+          
+        case 'hide_element':
+          if (action.animation === 'fade') {
+            element.style.transition = 'opacity 0.3s ease';
+            element.style.opacity = '0';
+            setTimeout(() => { element.style.display = 'none'; }, 300);
+          } else {
+            element.style.display = 'none';
+          }
+          console.log('✅ Webflow Action executed: Hide element');
+          break;
+          
+        case 'add_class':
+          element.classList.add(action.className || 'triggered');
+          console.log('✅ Webflow Action executed: Add class');
+          break;
+          
+        case 'remove_class':
+          element.classList.remove(action.className || 'triggered');
+          console.log('✅ Webflow Action executed: Remove class');
+          break;
+          
+        default:
+          console.warn('⚠️ Unknown Webflow action type:', action.type);
+      }
+    });
+  }
+  
+  // Global debug function
+  window.debugElementTracker = function() {
+    console.log('🔍 Element Tracker Debug Info:');
+    console.log('Config:', window.ELEMENT_TRACKING_CONFIG);
+    console.log('Tracker Available:', !!window.elementTracker);
+    console.log('Current URL:', window.location.href);
+    
+    if (window.elementTracker) {
+      console.log('Tracker Methods:', Object.keys(window.elementTracker));
+    }
+  };
+  
+  console.log('💡 Webflow Integration loaded. Type debugElementTracker() in console for debug info.');
+</script></pre>
+  </div>
+
+  <h2>🚀 Recommended Solution: Embedded Integration</h2>
+  <p><strong>This version works around ngrok browser warnings and is more reliable for Webflow:</strong></p>
+  
+  <div class="code-section">
+    <button class="copy-btn" onclick="copyToClipboard('embedded-code')">Copy Embedded Code</button>
+    <pre id="embedded-code"><!-- Element Tracking - Embedded Version for Webflow -->
+<script>
+  // Configuration
+  window.ELEMENT_TRACKING_CONFIG = {
+    "workflowId": "element-tracking-demo",
+    "pageUrl": window.location.href,
+    "apiEndpoint": "https://5b0112725db4.ngrok-free.app/api/analytics/track",
+    "debug": true,
+    "autoTrack": true,
+    "customSelectors": [],
+    "webflowMode": true
+  };
+
+  console.log('🎯 Element Tracker: Starting embedded Webflow integration...');
+
+  // Embedded Element Tracker (simplified version)
+  (function() {
+    'use strict';
+    
+    class WebflowElementTracker {
+      constructor(config = {}) {
+        this.config = { ...window.ELEMENT_TRACKING_CONFIG, ...config };
+        this.eventQueue = [];
+        this.sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        this.init();
+      }
+
+      init() {
+        console.log('🎯 Webflow Element Tracker initialized');
+        this.trackPageView();
+        this.setupEventListeners();
+        this.startEventProcessing();
+      }
+
+      trackPageView() {
+        this.addEvent({
+          type: 'page_view',
+          timestamp: new Date().toISOString(),
+          page: window.location.pathname,
+          url: window.location.href,
+          title: document.title,
+          referrer: document.referrer
+        });
+      }
+
+      setupEventListeners() {
+        // Track clicks on all elements
+        document.addEventListener('click', (event) => {
+          this.trackElementEvent(event, 'click');
+        });
+
+        // Track form submissions
+        document.addEventListener('submit', (event) => {
+          this.trackElementEvent(event, 'form_submit');
+        });
+
+        // Track input changes
+        document.addEventListener('change', (event) => {
+          if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
+            this.trackElementEvent(event, 'input_change');
+          }
+        });
+      }
+
+      trackElementEvent(event, eventType) {
+        const element = event.target;
+        const elementInfo = this.getElementInfo(element);
+        
+        this.addEvent({
+          type: eventType,
+          timestamp: new Date().toISOString(),
+          element: elementInfo,
+          page: window.location.pathname,
+          url: window.location.href
+        });
+      }
+
+      getElementInfo(element) {
+        return {
+          tagName: element.tagName.toLowerCase(),
+          id: element.id || null,
+          className: element.className || null,
+          textContent: element.textContent ? element.textContent.trim().substring(0, 100) : null,
+          href: element.href || null,
+          type: element.type || null,
+          name: element.name || null,
+          value: element.value || null
+        };
+      }
+
+      addEvent(eventData) {
+        const event = {
+          ...eventData,
+          sessionId: this.sessionId,
+          workflowId: this.config.workflowId,
+          timestamp: eventData.timestamp || new Date().toISOString()
+        };
+
+        this.eventQueue.push(event);
+        
+        if (this.config.debug) {
+          console.log('🎯 Event tracked:', event);
+        }
+      }
+
+      startEventProcessing() {
+        setInterval(() => {
+          if (this.eventQueue.length > 0) {
+            this.sendEvents();
+          }
+        }, 5000);
+      }
+
+      sendEvents() {
+        const events = [...this.eventQueue];
+        this.eventQueue = [];
+
+        fetch(this.config.apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ events })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (this.config.debug) {
+            console.log('✅ Events sent successfully:', data);
+          }
+        })
+        .catch(error => {
+          console.error('❌ Failed to send events:', error);
+          // Re-add events to queue for retry
+          this.eventQueue.unshift(...events);
+        });
+      }
+    }
+
+    // Initialize the tracker
+    window.elementTracker = new WebflowElementTracker();
+    
+    // Make it available globally
+    window.debugElementTracker = function() {
+      console.log('🔍 Element Tracker Debug Info:');
+      console.log('Session ID:', window.elementTracker.sessionId);
+      console.log('Config:', window.elementTracker.config);
+      console.log('Event Queue:', window.elementTracker.eventQueue);
+    };
+
+    console.log('✅ Webflow Element Tracker ready!');
+    console.log('💡 Type debugElementTracker() in console for debug info');
+
+  })();
+</script></pre>
+  </div>
+
+  <div class="warning">
+    <strong>📋 Instructions for Embedded Version:</strong>
+    <ol>
+      <li>Copy the embedded code above</li>
+      <li>Go to Webflow Project Settings → Custom Code → Head Code</li>
+      <li>Paste the code and save</li>
+      <li>Publish your site</li>
+      <li>Test by opening browser console and typing <code>debugElementTracker()</code></li>
+    </ol>
+  </div>
+
+  <h2>🧪 Step 3: Test Your Integration</h2>
+  <div class="warning">
+    <strong>After adding the code to Webflow:</strong>
+    <ol>
+      <li>Publish your Webflow site</li>
+      <li>Open your live site in browser</li>
+      <li>Open Developer Tools (F12) → Console tab</li>
+      <li>Look for green ✅ messages indicating successful loading</li>
+      <li>Interact with buttons, forms, scroll - check for tracking events</li>
+      <li>Type <code>debugElementTracker()</code> in console for debug info</li>
+    </ol>
+  </div>
+
+  <h2>🔧 Troubleshooting</h2>
+  <div class="code-section">
+    <h3>Common Issues:</h3>
+    <ul>
+      <li><strong>Script not loading:</strong> Check if ngrok tunnel is running and accessible</li>
+      <li><strong>CORS errors:</strong> Make sure you're using the https:// ngrok URL</li>
+      <li><strong>No tracking events:</strong> Check console for ElementTracker initialization messages</li>
+      <li><strong>Webflow CSP:</strong> Webflow should allow external scripts, but check console for CSP errors</li>
+    </ul>
+    
+    <h3>Debug Commands (run in browser console):</h3>
+    <pre>
+// Check if tracker is loaded
+console.log('Tracker loaded:', !!window.elementTracker);
+
+// Check configuration
+console.log('Config:', window.ELEMENT_TRACKING_CONFIG);
+
+// Test manual event
+if (window.elementTracker) {
+  window.elementTracker.addEvent({
+    type: 'test',
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Full debug info
+debugElementTracker();
+</pre>
+  </div>
+
+  <script>
+    function copyToClipboard(elementId) {
+      const element = document.getElementById(elementId);
+      const text = element.textContent;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = element.previousElementSibling;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.background = '#28a745';
+        
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.background = '#007cba';
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html> 

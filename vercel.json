@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "railway-server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/railway-server.js"
+    }
+  ],
+  "functions": {
+    "api/scrape.js": {
+      "maxDuration": 25
+    },
+    "api/health.js": {
+      "maxDuration": 10
+    },
+    "railway-server.js": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "NODE_ENV": "production"
+  }
+} 

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirect Loop Prevention Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+        }
+        button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .danger {
+            background: #dc3545;
+        }
+        .danger:hover {
+            background: #c82333;
+        }
+        .success {
+            background: #28a745;
+        }
+        .warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        .log {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 0 5px 5px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .log.warning {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        .log.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .log.success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔄 Redirect Loop Prevention Test</h1>
+    
+    <div class="test-section">
+        <h2>🛡️ Loop Prevention Tests</h2>
+        <p>These tests verify that our redirect loop prevention is working correctly.</p>
+        
+        <button onclick="testSamePageRedirect()" class="danger">
+            🚫 Test Same Page Redirect (Should Block)
+        </button>
+        
+        <button onclick="testRapidRedirects()" class="warning">
+            ⚡ Test Rapid Redirects (Should Block After First)
+        </button>
+        
+        <button onclick="testValidRedirect()" class="success">
+            ✅ Test Valid Redirect (Should Work)
+        </button>
+        
+        <button onclick="clearRedirectHistory()">
+            🧹 Clear Redirect History
+        </button>
+        
+        <div id="test-log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 System Status</h2>
+        <div id="system-status"></div>
+    </div>
+
+    <script src="src/utils/unifiedWorkflowSystem.js"></script>
+    <script>
+        let testExecutor;
+        
+        // Initialize test environment
+        document.addEventListener('DOMContentLoaded', () => {
+            logMessage('🚀 Test page loaded', 'success');
+            checkSystemStatus();
+            
+            // Create a test executor instance for testing
+            if (window.UnifiedWorkflowSystem) {
+                testExecutor = new window.UnifiedWorkflowSystem({ debug: true });
+                logMessage('✅ Unified Workflow System loaded', 'success');
+            } else {
+                logMessage('❌ Unified Workflow System not found', 'error');
+            }
+        });
+
+        function logMessage(message, type = 'info') {
+            const logDiv = document.getElementById('test-log');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log ${type}`;
+            logEntry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function checkSystemStatus() {
+            const statusDiv = document.getElementById('system-status');
+            
+            let status = '<h3>System Components:</h3><ul>';
+            status += `<li>Unified Workflow System: ${window.UnifiedWorkflowSystem ? '✅ Available' : '❌ Not Found'}</li>`;
+            status += `<li>Window.workflowSystem: ${window.workflowSystem ? '✅ Initialized' : '⏳ Not Initialized'}</li>`;
+            status += `<li>Legacy Prevention: ${window.DISABLE_LEGACY_WORKFLOWS ? '✅ Active' : '❌ Inactive'}</li>`;
+            status += '</ul>';
+            
+            status += '<h3>Session Storage:</h3><ul>';
+            const redirectKeys = Object.keys(sessionStorage).filter(key => key.startsWith('redirect_'));
+            if (redirectKeys.length === 0) {
+                status += '<li>No redirect history</li>';
+            } else {
+                redirectKeys.forEach(key => {
+                    const timestamp = sessionStorage.getItem(key);
+                    const timeAgo = Math.round((Date.now() - parseInt(timestamp)) / 1000);
+                    status += `<li>${key}: ${timeAgo}s ago</li>`;
+                });
+            }
+            status += '</ul>';
+            
+            statusDiv.innerHTML = status;
+        }
+
+        function testSamePageRedirect() {
+            logMessage('🧪 Testing same page redirect prevention...', 'warning');
+            
+            const config = {
+                url: window.location.href, // Same page
+                delay: 0,
+                newTab: false
+            };
+            
+            if (testExecutor && testExecutor.redirectPage) {
+                testExecutor.redirectPage(config).then(result => {
+                    if (result.success === false) {
+                        logMessage('✅ Same page redirect blocked successfully!', 'success');
+                    } else {
+                        logMessage('❌ Same page redirect was NOT blocked!', 'error');
+                    }
+                    checkSystemStatus();
+                });
+            } else {
+                logMessage('❌ Test executor not available', 'error');
+            }
+        }
+
+        function testRapidRedirects() {
+            logMessage('🧪 Testing rapid redirect prevention...', 'warning');
+            
+            const config = {
+                url: 'https://www.example.com',
+                delay: 0,
+                newTab: true // Use new tab so we don't actually leave
+            };
+            
+            if (testExecutor && testExecutor.redirectPage) {
+                // First redirect should work
+                testExecutor.redirectPage(config).then(result => {
+                    if (result.success) {
+                        logMessage('✅ First redirect succeeded', 'success');
+                        
+                        // Second immediate redirect should be blocked
+                        setTimeout(() => {
+                            testExecutor.redirectPage(config).then(result2 => {
+                                if (result2.success === false) {
+                                    logMessage('✅ Rapid redirect blocked successfully!', 'success');
+                                } else {
+                                    logMessage('❌ Rapid redirect was NOT blocked!', 'error');
+                                }
+                                checkSystemStatus();
+                            });
+                        }, 100);
+                    } else {
+                        logMessage('❌ First redirect failed unexpectedly', 'error');
+                    }
+                });
+            } else {
+                logMessage('❌ Test executor not available', 'error');
+            }
+        }
+
+        function testValidRedirect() {
+            logMessage('🧪 Testing valid redirect (new tab)...', 'success');
+            
+            const config = {
+                url: 'https://www.google.com',
+                delay: 1,
+                newTab: true
+            };
+            
+            if (testExecutor && testExecutor.redirectPage) {
+                testExecutor.redirectPage(config).then(result => {
+                    if (result.success) {
+                        logMessage('✅ Valid redirect scheduled successfully!', 'success');
+                        logMessage('🔄 New tab should open in 1 second...', 'info');
+                    } else {
+                        logMessage('❌ Valid redirect failed!', 'error');
+                    }
+                    checkSystemStatus();
+                });
+            } else {
+                logMessage('❌ Test executor not available', 'error');
+            }
+        }
+
+        function clearRedirectHistory() {
+            const redirectKeys = Object.keys(sessionStorage).filter(key => key.startsWith('redirect_'));
+            redirectKeys.forEach(key => sessionStorage.removeItem(key));
+            logMessage(`🧹 Cleared ${redirectKeys.length} redirect history entries`, 'info');
+            checkSystemStatus();
+        }
+
+        // Update system status every 5 seconds
+        setInterval(checkSystemStatus, 5000);
+    </script>
+</body>
+</html> 
