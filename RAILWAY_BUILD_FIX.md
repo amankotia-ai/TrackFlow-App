@@ -51,10 +51,10 @@ Once deployment succeeds, test:
 
 ```bash
 # Should return 200 (not 502)
-curl -I https://trackflow-webapp-production.up.railway.app/api/health
+curl -I https://trackflow-app-production.up.railway.app/api/health
 
 # Should return workflows
-curl https://trackflow-webapp-production.up.railway.app/api/workflows/active
+curl https://trackflow-app-production.up.railway.app/api/workflows/active
 ```
 
 ## 📊 Expected Success Logs

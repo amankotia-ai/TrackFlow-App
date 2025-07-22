@@ -63,7 +63,7 @@ export function generateIntegrationCode(
   // Detect if we should use ngrok URL (when config provides external URLs)
   const baseUrl = config.apiEndpoint && config.apiEndpoint.includes('ngrok') 
     ? config.apiEndpoint.replace('/api/analytics/track', '')
-    : 'https://trackflow-webapp-production.up.railway.app';
+    : 'https://trackflow-app-production.up.railway.app';
 
   const trackingConfig: TrackingConfig = {
     workflowId: workflowWithConnections.id,
@@ -96,8 +96,8 @@ export function generateIntegrationCode(
  * Generate the simple head code for unified system
  */
 function generateUnifiedHeadCode(config: TrackingConfig): string {
-  const scriptUrl = config.trackingScriptUrl || 'https://trackflow-webapp-production.up.railway.app/api/unified-workflow-system.js';
-  const antiFlickerUrl = 'https://trackflow-webapp-production.up.railway.app/api/anti-flicker.js';
+  const scriptUrl = config.trackingScriptUrl || 'https://trackflow-app-production.up.railway.app/api/unified-workflow-system.js';
+  const antiFlickerUrl = 'https://trackflow-app-production.up.railway.app/api/anti-flicker.js';
   
   const antiFlickerConfig = `
   // Configure anti-flicker settings

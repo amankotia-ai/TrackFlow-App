@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Unified Workflow System - Local</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .hero-title {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .debug-info {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+    </style>
+    
+    <!-- Load scripts directly from local files -->
+    <script>
+        // Load anti-flicker script first
+        const antiFlickerScript = document.createElement('script');
+        antiFlickerScript.src = './src/utils/antiFlickerScript.js';
+        document.head.appendChild(antiFlickerScript);
+    </script>
+</head>
+<body>
+    <div class="test-section">
+        <h1 class="hero-title">Test Page for Unified Workflow System</h1>
+        <p>This page tests the unified workflow system locally.</p>
+        
+        <div class="test-buttons">
+            <button class="test-button" id="btn-1">Original Button 1</button>
+            <button class="test-button" id="btn-2">Original Button 2</button>
+            <button class="test-button" id="btn-3">Click Me Button</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>Content Elements</h2>
+            <p class="main-title">This is a main title that might be replaced</p>
+            <div class="hero-text">Hero text content for testing</div>
+            <a href="#" class="test-link">Test Link</a>
+        </div>
+        
+        <div class="debug-info" id="debug-info">
+            <strong>Debug Information:</strong><br>
+            Workflows loaded: <span id="workflows-count">Loading...</span><br>
+            System initialized: <span id="system-status">Loading...</span><br>
+            Device type: <span id="device-type">Loading...</span><br>
+            Page URL: <span id="page-url">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Load unified workflow system -->
+    <script src="./src/utils/unifiedWorkflowSystem.js"></script>
+    
+    <script>
+        // Initialize with local configuration
+        window.workflowSystem = new UnifiedWorkflowSystem({
+            apiEndpoint: 'http://localhost:3001', // Local Railway server
+            debug: true,
+            hideContentDuringInit: false, // Disable for testing
+            showLoadingIndicator: true
+        });
+
+        // Debug information updater
+        function updateDebugInfo() {
+            document.getElementById('workflows-count').textContent = 
+                window.workflowSystem?.workflows?.size || 'Not loaded';
+            document.getElementById('system-status').textContent = 
+                window.workflowSystem?.initialized ? 'Yes' : 'No';
+            document.getElementById('device-type').textContent = 
+                window.workflowSystem?.pageContext?.deviceType || 'Unknown';
+            document.getElementById('page-url').textContent = window.location.href;
+        }
+
+        // Update debug info every second
+        setInterval(updateDebugInfo, 1000);
+        updateDebugInfo();
+
+        // Test workflow system initialization
+        async function testSystem() {
+            try {
+                console.log('🧪 Testing unified workflow system...');
+                await window.workflowSystem.initialize();
+                console.log('✅ System test completed');
+                updateDebugInfo();
+            } catch (error) {
+                console.error('❌ System test failed:', error);
+            }
+        }
+
+        // Start test when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', testSystem);
+        } else {
+            testSystem();
+        }
+
+        // Add click handlers for testing
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('.test-button')) {
+                console.log('🖱️ Button clicked:', e.target.textContent);
+            }
+        });
+    </script>
+</body>
+</html> 

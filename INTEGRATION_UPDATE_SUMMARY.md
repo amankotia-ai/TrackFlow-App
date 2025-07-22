@@ -27,7 +27,7 @@ The workflow page integration section has been **completely updated** to use the
 ### After (Simple - NEW)
 ```html
 <!-- Single script - that's it! -->
-<script src="https://trackflow-webapp-production.up.railway.app/api/unified-workflow-system.js"></script>
+<script src="https://trackflow-app-production.up.railway.app/api/unified-workflow-system.js"></script>
 ```
 
 ## 📊 Key Changes
@@ -72,7 +72,7 @@ When users click **"Integration"** in the workflow builder, they now see:
 ### Head Code Tab
 ```html
 <!-- Unified Workflow System - Add to <head> section -->
-<script src="https://trackflow-webapp-production.up.railway.app/api/unified-workflow-system.js"></script>
+<script src="https://trackflow-app-production.up.railway.app/api/unified-workflow-system.js"></script>
 ```
 
 ### Body Code Tab (Optional)

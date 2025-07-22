@@ -20,16 +20,16 @@ Add this code to your website's `<head>` section:
   // Replace with your actual workflow ID from the database
   window.ELEMENT_TRACKING_CONFIG = {
     workflowId: 'YOUR-WORKFLOW-ID-HERE', // e.g., '0861bb24-0005-40db-a8f2-0d5a012623bf'
-    apiEndpoint: "https://trackflow-webapp-production.up.railway.app/api/analytics/track",
-    workflowEndpoint: "https://trackflow-webapp-production.up.railway.app",
+    apiEndpoint: "https://trackflow-app-production.up.railway.app/api/analytics/track",
+    workflowEndpoint: "https://trackflow-app-production.up.railway.app",
     debug: false, // Set to true for debugging
     autoTrack: true
   };
 </script>
 
 <!-- Load TrackFlow Scripts -->
-<script src="https://trackflow-webapp-production.up.railway.app/enhanced-tracking-script.js"></script>
-<script src="https://trackflow-webapp-production.up.railway.app/workflow-executor.js"></script>
+<script src="https://trackflow-app-production.up.railway.app/enhanced-tracking-script.js"></script>
+<script src="https://trackflow-app-production.up.railway.app/workflow-executor.js"></script>
 ```
 
 ## Step 3: Test Your Integration
@@ -73,8 +73,8 @@ Here's a complete example for a page:
   <script>
     window.ELEMENT_TRACKING_CONFIG = {
       workflowId: '0861bb24-0005-40db-a8f2-0d5a012623bf',
-      apiEndpoint: "https://trackflow-webapp-production.up.railway.app/api/analytics/track",
-      workflowEndpoint: "https://trackflow-webapp-production.up.railway.app",
+          apiEndpoint: "https://trackflow-app-production.up.railway.app/api/analytics/track",
+    workflowEndpoint: "https://trackflow-app-production.up.railway.app",
       debug: true,
       autoTrack: true
     };

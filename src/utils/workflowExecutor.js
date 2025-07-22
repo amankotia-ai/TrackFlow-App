@@ -15,7 +15,7 @@
       }
 
       this.config = {
-        apiEndpoint: 'https://trackflow-webapp-production.up.railway.app',
+        apiEndpoint: 'https://trackflow-app-production.up.railway.app',
         debug: true,
         retryAttempts: 3,
         executionDelay: 100,

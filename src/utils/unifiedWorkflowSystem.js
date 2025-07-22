@@ -10,7 +10,7 @@
   class UnifiedWorkflowSystem {
     constructor(config = {}) {
       this.config = {
-        apiEndpoint: 'https://trackflow-webapp-production.up.railway.app',
+        apiEndpoint: 'https://trackflow-app-production.up.railway.app',
         apiKey: null, // Add API key support
         debug: true, // Enable debug by default to help troubleshooting
         retryAttempts: 3,

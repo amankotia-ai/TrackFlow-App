@@ -11,8 +11,8 @@
   // Configuration
   const TRACKING_CONFIG = {
     debug: true,
-    apiEndpoint: 'https://trackflow-webapp-production.up.railway.app/api/analytics/track',
-    workflowEndpoint: 'https://trackflow-webapp-production.up.railway.app',
+    apiEndpoint: 'https://trackflow-app-production.up.railway.app/api/analytics/track',
+    workflowEndpoint: 'https://trackflow-app-production.up.railway.app',
     batchSize: 10,
     batchTimeout: 5000,
     throttleMs: 100,

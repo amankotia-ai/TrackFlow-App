@@ -1340,7 +1340,7 @@ class ApiClient {
     try {
       const apiUrl = window.location.hostname === 'localhost' 
         ? 'http://localhost:3001/api/scrape'
-        : 'https://trackflow-webapp-production.up.railway.app/api/scrape';
+        : 'https://trackflow-app-production.up.railway.app/api/scrape';
       
       const data = await this.requestWithRetry(apiUrl, {
         method: 'POST',
