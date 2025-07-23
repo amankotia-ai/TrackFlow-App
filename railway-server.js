@@ -36,6 +36,13 @@ console.log('📋 Supabase URL:', supabaseUrl);
 console.log('🔑 Supabase Anon Key:', supabaseKey ? 'Set ✅' : 'Missing ❌');
 console.log('🔑 Supabase Service Role Key:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Set ✅' : 'Missing ❌ (using anon key as fallback)');
 
+// Check if frontend was built
+const distExists = fs.existsSync(path.join(__dirname, 'dist'));
+const indexExists = fs.existsSync(path.join(__dirname, 'dist', 'index.html'));
+console.log('🏗️ Frontend Build Status:');
+console.log('   📁 dist/ directory:', distExists ? 'Exists ✅' : 'Missing ❌');
+console.log('   📄 index.html:', indexExists ? 'Exists ✅' : 'Missing ❌');
+
 // CORS for all origins
 app.use(cors({
   origin: '*', // Allow all origins for workflow script delivery
@@ -721,8 +728,25 @@ app.get('*', (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
   
+  // Check if dist directory exists
+  const distPath = path.join(__dirname, 'dist', 'index.html');
+  if (!fs.existsSync(distPath)) {
+    console.error('❌ Frontend not built: dist/index.html not found');
+    return res.status(503).send(`
+      <html>
+        <head><title>TrackFlow - Building...</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 2rem;">
+          <h1>🚧 TrackFlow is Building</h1>
+          <p>The frontend is currently being built. Please wait a moment and refresh.</p>
+          <p>If this persists, check the deployment logs.</p>
+          <button onclick="location.reload()">Refresh</button>
+        </body>
+      </html>
+    `);
+  }
+  
   // Serve the React app
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(distPath);
 });
 
 app.listen(PORT, () => {
