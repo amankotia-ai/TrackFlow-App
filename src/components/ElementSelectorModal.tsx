@@ -219,26 +219,38 @@ const ElementSelectorModal: React.FC<ElementSelectorModalProps> = ({
                                   }
                                 `}
                               >
-                                <div className="flex items-start space-x-3">
+                                                              <div className="flex items-start space-x-3">
+                                <div className="flex flex-col items-center space-y-1">
                                   <span className="text-xs bg-secondary-100 text-secondary-600 px-2 py-1 rounded font-mono flex-shrink-0">
                                     {element.tag}
                                   </span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-secondary-900 line-clamp-2 mb-1">
-                                      {element.text}
-                                    </p>
-                                    {element.selector && (
-                                      <p className="text-xs text-secondary-500 font-mono break-all">
-                                        {element.selector}
-                                      </p>
-                                    )}
-                                    {element.selectorReliability !== undefined && (
-                                      <span className={`inline-block text-xs px-2 py-1 rounded mt-2 ${getReliabilityColor(element.selectorReliability)}`}>
-                                        {getReliabilityText(element.selectorReliability)} reliability
-                                      </span>
-                                    )}
-                                  </div>
+                                  {(element as any).duplicateGroup && (
+                                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-mono">
+                                      {(element as any).nthPosition}/{(element as any).totalSimilar}
+                                    </span>
+                                  )}
                                 </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-secondary-900 line-clamp-2 mb-1">
+                                    {element.text}
+                                  </p>
+                                  {element.selector && (
+                                    <p className="text-xs text-secondary-500 font-mono break-all">
+                                      {element.selector}
+                                    </p>
+                                  )}
+                                  {(element as any).duplicateGroup && (
+                                    <p className="text-xs text-orange-600 mt-1">
+                                      📍 Element {(element as any).nthPosition} of {(element as any).totalSimilar} with identical text
+                                    </p>
+                                  )}
+                                  {element.selectorReliability !== undefined && (
+                                    <span className={`inline-block text-xs px-2 py-1 rounded mt-2 ${getReliabilityColor(element.selectorReliability)}`}>
+                                      {getReliabilityText(element.selectorReliability)} reliability
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                               </div>
                             ))}
                           </div>

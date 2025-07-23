@@ -133,9 +133,16 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
                         <div className="p-4 space-y-2">
                           {elements.slice(0, 5).map((element, index) => (
                             <div key={index} className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded">
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono">
-                                {element.tag}
-                              </span>
+                              <div className="flex flex-col items-center space-y-1">
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono">
+                                  {element.tag}
+                                </span>
+                                {(element as any).duplicateGroup && (
+                                  <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-mono">
+                                    {(element as any).nthPosition}/{(element as any).totalSimilar}
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-900 truncate">
                                   {element.text}
@@ -143,6 +150,11 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
                                 {element.selector && (
                                   <p className="text-xs text-gray-500 font-mono">
                                     {element.selector}
+                                  </p>
+                                )}
+                                {(element as any).duplicateGroup && (
+                                  <p className="text-xs text-orange-600 mt-1">
+                                    📍 Duplicate {(element as any).nthPosition} of {(element as any).totalSimilar}
                                   </p>
                                 )}
                               </div>

@@ -375,6 +375,7 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
         <div className="fixed inset-0 z-40 pointer-events-none">
           <div className="absolute inset-y-0 right-0 w-96 pointer-events-auto">
             <NodeConfigPanel
+              key={selectedNode.id}
               node={selectedNode}
               onNodeUpdate={handleNodeUpdate}
               onClose={() => setSelectedNode(null)}

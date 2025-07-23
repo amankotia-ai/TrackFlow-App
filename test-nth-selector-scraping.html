@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nth-of-type Selector Generation Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .test-content {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .duplicate-item {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .scraped-results {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .element-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            display: flex;
+            align-items: start;
+            gap: 10px;
+        }
+        .element-tag {
+            background: #6c757d;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .nth-badge {
+            background: #fd7e14;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 10px;
+        }
+        .element-content {
+            flex: 1;
+        }
+        .element-text {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        .element-selector {
+            font-family: monospace;
+            font-size: 11px;
+            color: #6c757d;
+            background: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        .duplicate-info {
+            color: #fd7e14;
+            font-size: 11px;
+            margin-top: 3px;
+        }
+        .card {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border-left: 4px solid #2196f3;
+        }
+    </style>
+</head>
+<body>
+    <h1>nth-of-type Selector Generation Test</h1>
+    <p>This page demonstrates how the scraping system now generates nth-of-type selectors for repeating text elements.</p>
+
+    <div class="container">
+        <h3>Test Content with Duplicate Text</h3>
+        
+        <div class="test-content">
+            <h2>Pricing Plans</h2>
+            <div class="duplicate-item">
+                <h3>Premium Plan</h3>
+                <p>Get started with our premium features</p>
+            </div>
+            <div class="duplicate-item">
+                <h3>Basic Plan</h3>
+                <p>Get started with our premium features</p>
+            </div>
+            <div class="duplicate-item">
+                <h3>Enterprise Plan</h3>
+                <p>Get started with our premium features</p>
+            </div>
+        </div>
+
+        <div class="test-content">
+            <h2>Navigation Menu</h2>
+            <nav>
+                <a href="/home">Home</a>
+                <a href="/about">About</a>
+                <a href="/contact">Contact</a>
+                <a href="/contact">Contact</a> <!-- Duplicate link -->
+            </nav>
+        </div>
+
+        <div class="test-content">
+            <h2>Product List</h2>
+            <ul>
+                <li>Product A - $99</li>
+                <li>Product B - $149</li>
+                <li>Product A - $99</li> <!-- Duplicate item -->
+                <li>Product C - $199</li>
+            </ul>
+        </div>
+
+        <div class="test-content">
+            <h2>Repeated Div Elements</h2>
+            <div class="card">Special Offer: 50% Off</div>
+            <div class="card">Limited Time Deal</div>
+            <div class="card">Special Offer: 50% Off</div> <!-- Duplicate div -->
+            <div class="card">Free Shipping Available</div>
+            <div class="card">Special Offer: 50% Off</div> <!-- Another duplicate div -->
+        </div>
+
+        <button onclick="simulateScraping()">🔍 Simulate Scraping</button>
+        <button onclick="clearResults()">🧹 Clear Results</button>
+    </div>
+
+    <div class="container">
+        <h3>Simulated Scraping Results</h3>
+        <p>This shows how the enhanced scraping would process the elements above:</p>
+        <div id="results" class="scraped-results">
+            Click "Simulate Scraping" to see results...
+        </div>
+    </div>
+
+    <script>
+        // Mock scraping function that simulates the enhanced logic
+        function simulateScraping() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Processing...\n';
+
+            // Simulate scraping delay
+            setTimeout(() => {
+                const scrapedElements = mockScrapeElements();
+                displayResults(scrapedElements);
+            }, 500);
+        }
+
+        function mockScrapeElements() {
+            // Simulate extracting all text elements
+            const allElements = [];
+            
+            // Extract all text elements from the page, including divs
+            const textSelectors = ['h1', 'h2', 'h3', 'p', 'a', 'li', 'div'];
+            textSelectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach((el, index) => {
+                    const text = el.textContent.trim();
+                    if (text && text.length > 2 && !text.includes('Simulate') && !text.includes('Clear') && !text.includes('This page demonstrates')) {
+                        // For divs, be more inclusive to capture repeated content
+                        let shouldInclude = true;
+                        
+                        // Apply uniqueness check only for non-container elements
+                        if (el.tagName.toLowerCase() !== 'div') {
+                            const parentText = el.parentElement ? el.parentElement.textContent.trim() : '';
+                            shouldInclude = text !== parentText || el.children.length === 0;
+                        }
+
+                        if (shouldInclude) {
+                            allElements.push({
+                                tag: el.tagName.toLowerCase(),
+                                text: text,
+                                selector: `${el.tagName.toLowerCase()}`,
+                                element: el
+                            });
+                        }
+                    }
+                });
+            });
+
+            // Group by text content to detect duplicates
+            const textGroups = new Map();
+            allElements.forEach(element => {
+                const text = element.text.trim();
+                if (!textGroups.has(text)) {
+                    textGroups.set(text, []);
+                }
+                textGroups.get(text).push(element);
+            });
+
+            // Process groups and add nth-of-type selectors
+            const processedElements = [];
+            textGroups.forEach((elements, text) => {
+                if (elements.length === 1) {
+                    // Single element with unique text
+                    processedElements.push({
+                        ...elements[0],
+                        duplicateGroup: false
+                    });
+                } else {
+                    // Multiple elements with same text - add nth-of-type
+                    elements.forEach((element, index) => {
+                        const nthSelector = `${element.tag}:nth-of-type(${index + 1})`;
+                        processedElements.push({
+                            ...element,
+                            selector: nthSelector,
+                            nthPosition: index + 1,
+                            totalSimilar: elements.length,
+                            duplicateGroup: true
+                        });
+                    });
+                }
+            });
+
+            return {
+                totalElements: allElements.length,
+                uniqueTextGroups: textGroups.size,
+                processedElements: processedElements,
+                duplicateGroups: Array.from(textGroups.values()).filter(group => group.length > 1)
+            };
+        }
+
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            
+            let output = `📊 Scraping Results Summary:\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `Total elements found: ${results.totalElements}\n`;
+            output += `Unique text groups: ${results.uniqueTextGroups}\n`;
+            output += `Duplicate groups: ${results.duplicateGroups.length}\n\n`;
+
+            if (results.duplicateGroups.length > 0) {
+                output += `🔍 Duplicate Text Groups Found:\n`;
+                output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                results.duplicateGroups.forEach((group, groupIndex) => {
+                    const text = group[0].text;
+                    output += `\nGroup ${groupIndex + 1}: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"\n`;
+                    output += `└─ Found ${group.length} elements with identical text\n`;
+                    
+                    group.forEach((element, elementIndex) => {
+                        const nthSelector = `${element.tag}:nth-of-type(${elementIndex + 1})`;
+                        output += `   ${elementIndex + 1}. <${element.tag}> → ${nthSelector}\n`;
+                    });
+                });
+                output += `\n`;
+            }
+
+            output += `📋 All Processed Elements:\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+            results.processedElements.forEach((element, index) => {
+                output += `\n${index + 1}. `;
+                
+                if (element.duplicateGroup) {
+                    output += `🔄 [DUPLICATE ${element.nthPosition}/${element.totalSimilar}] `;
+                } else {
+                    output += `✅ [UNIQUE] `;
+                }
+                
+                output += `<${element.tag}>\n`;
+                output += `   Text: "${element.text.substring(0, 60)}${element.text.length > 60 ? '...' : ''}"\n`;
+                output += `   Selector: ${element.selector}\n`;
+                
+                if (element.duplicateGroup) {
+                    output += `   📍 Position: ${element.nthPosition} of ${element.totalSimilar} identical elements\n`;
+                }
+            });
+
+            output += `\n\n💡 Benefits of nth-of-type Selectors:\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `• Precise targeting: Target exact element instances\n`;
+            output += `• Avoid ambiguity: No more replacing all similar elements\n`;
+            output += `• Better workflows: More reliable text replacement actions\n`;
+            output += `• Smart workflows: Works with new smart text replacement logic\n`;
+
+            resultsDiv.innerHTML = output;
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = 'Click "Simulate Scraping" to see results...';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('nth-of-type Selector Generation Test initialized');
+        });
+    </script>
+</body>
+</html> 

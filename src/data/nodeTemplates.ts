@@ -618,7 +618,7 @@ export const nodeTemplates: NodeTemplate[] = [
         label: 'CSS Selector', 
         required: true, 
         placeholder: '#headline, .cta-button, h1',
-        description: 'CSS selector for target element(s)'
+        description: 'CSS selector for target element(s). For text replacement, if multiple elements match, only the first or most specific match will be modified.'
       },
       { 
         key: 'newText', 
@@ -634,7 +634,7 @@ export const nodeTemplates: NodeTemplate[] = [
         label: 'Original Text (Optional)', 
         required: false, 
         placeholder: 'Text to replace',
-        description: 'Specific text to replace (leave empty to replace all content)'
+        description: 'Specific text to replace. When provided, this helps target the exact element containing this text among multiple matches.'
       }
     ]
   },

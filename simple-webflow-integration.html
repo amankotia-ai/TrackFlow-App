@@ -157,17 +157,54 @@
           const elements = document.querySelectorAll(config.selector);
           console.log(`🎬 Replace Text: Found ${elements.length} elements for "${config.selector}"`);
           
-          elements.forEach(element => {
-            const oldText = element.textContent;
+          // For text replacement, apply smart targeting to avoid replacing content in multiple identical elements
+          if (elements.length > 1) {
+            console.log(`🎯 Text replacement detected with ${elements.length} matching elements. Applying smart targeting...`);
             
-            if (config.originalText && element.textContent.includes(config.originalText)) {
-              element.textContent = element.textContent.replace(config.originalText, config.newText);
-            } else {
-              element.textContent = config.newText;
+            // Try to find the most specific element to replace
+            let targetElement = null;
+            
+            // Strategy 1: If originalText is provided, find the element containing that exact text
+            if (config.originalText) {
+              for (const element of elements) {
+                if (element.textContent && element.textContent.includes(config.originalText)) {
+                  targetElement = element;
+                  console.log(`🎯 Found element with original text: "${config.originalText}"`);
+                  break;
+                }
+              }
             }
             
-            console.log(`✅ Text replaced: "${oldText}" → "${element.textContent}"`);
-          });
+            // Strategy 2: If no originalText match, use the first element
+            if (!targetElement) {
+              targetElement = elements[0];
+              console.log(`🎯 Using first matching element for text replacement`);
+            }
+            
+            // Apply replacement to only the targeted element
+            const oldText = targetElement.textContent;
+            
+            if (config.originalText && targetElement.textContent.includes(config.originalText)) {
+              targetElement.textContent = targetElement.textContent.replace(config.originalText, config.newText);
+            } else {
+              targetElement.textContent = config.newText;
+            }
+            
+            console.log(`✅ Text replaced in 1 specific element: "${oldText}" → "${targetElement.textContent}"`);
+          } else {
+            // Single element match - proceed as normal
+            elements.forEach(element => {
+              const oldText = element.textContent;
+              
+              if (config.originalText && element.textContent.includes(config.originalText)) {
+                element.textContent = element.textContent.replace(config.originalText, config.newText);
+              } else {
+                element.textContent = config.newText;
+              }
+              
+              console.log(`✅ Text replaced: "${oldText}" → "${element.textContent}"`);
+            });
+          }
         }
         
         executeHideElement(config) {

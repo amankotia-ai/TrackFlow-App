@@ -388,11 +388,43 @@
       }
       
       let successCount = 0;
-      elements.forEach(element => {
-        if (this.replaceContentRobust(element, config)) {
-          successCount++;
+      
+      // For text replacement, apply smart targeting to avoid replacing content in multiple identical elements
+      if (elements.length > 1) {
+        console.log(`🎯 Text replacement detected with ${elements.length} matching elements. Applying smart targeting...`);
+        
+        // Try to find the most specific element to replace
+        let targetElement = null;
+        
+        // Strategy 1: If originalText is provided, find the element containing that exact text
+        if (config.originalText) {
+          for (const element of elements) {
+            if (element.textContent && element.textContent.includes(config.originalText)) {
+              targetElement = element;
+              console.log(`🎯 Found element with original text: "${config.originalText}"`);
+              break;
+            }
+          }
         }
-      });
+        
+        // Strategy 2: If no originalText match, use the first element
+        if (!targetElement) {
+          targetElement = elements[0];
+          console.log(`🎯 Using first matching element for text replacement`);
+        }
+        
+        // Apply replacement to only the targeted element
+        if (this.replaceContentRobust(targetElement, config)) {
+          successCount = 1;
+        }
+      } else {
+        // Single element match - proceed as normal
+        elements.forEach(element => {
+          if (this.replaceContentRobust(element, config)) {
+            successCount++;
+          }
+        });
+      }
       
       this.logActionExecution('Replace Text', config.selector, `Text changed in ${successCount}/${elements.length} elements to: ${config.newText}`);
     }

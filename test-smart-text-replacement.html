@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Text Replacement Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .test-div {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .reset {
+            background: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Text Replacement Test</h1>
+    <p>This test demonstrates the new smart text replacement behavior that only targets specific elements instead of replacing content in all matching elements.</p>
+
+    <div class="container">
+        <h3>Test Case: Multiple Divs with Same Class</h3>
+        <div class="test-div">Original content in div 1</div>
+        <div class="test-div">Original content in div 2</div>
+        <div class="test-div">Different content here</div>
+        <div class="test-div">Original content in div 4</div>
+        
+        <button onclick="testReplaceAll()">Test 1: Replace All (.test-div)</button>
+        <button onclick="testReplaceSpecific()">Test 2: Replace Specific (with originalText)</button>
+        <button onclick="testReplaceFirst()">Test 3: Replace First (no originalText)</button>
+        <button onclick="resetContent()" class="reset">Reset Content</button>
+    </div>
+
+    <div class="container">
+        <h3>Test Logs</h3>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        // Mock workflow system for testing
+        class TestWorkflowSystem {
+            constructor() {
+                this.processedSelectors = new Set();
+            }
+
+            log(message, level = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logElement = document.getElementById('log');
+                logElement.textContent += `[${timestamp}] ${level.toUpperCase()}: ${message}\n`;
+                console.log(`[${level.toUpperCase()}] ${message}`);
+            }
+
+            /**
+             * Apply smart text replacement logic
+             */
+            applySingleSelector(selector, config) {
+                const elements = document.querySelectorAll(selector);
+                if (!elements?.length) {
+                    this.log(`No elements found for selector: ${selector}`, 'warning');
+                    return false;
+                }
+                
+                let successCount = 0;
+                
+                // For text replacement actions, we need special handling to avoid
+                // replacing content in multiple identical elements when targeting text content
+                const isTextReplacement = config.newText !== undefined || config.originalText !== undefined;
+                
+                if (isTextReplacement && elements.length > 1) {
+                    this.log(`🎯 Text replacement detected with ${elements.length} matching elements. Applying smart targeting...`, 'info');
+                    
+                    // Try to find the most specific element to replace
+                    let targetElement = null;
+                    
+                    // Strategy 1: If originalText is provided, find the element containing that exact text
+                    if (config.originalText) {
+                        for (const element of elements) {
+                            if (element.textContent && element.textContent.includes(config.originalText)) {
+                                targetElement = element;
+                                this.log(`🎯 Found element with original text: "${config.originalText}"`, 'success');
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Strategy 2: If no originalText match, use the first element
+                    if (!targetElement) {
+                        targetElement = elements[0];
+                        this.log(`🎯 Using first matching element for text replacement`, 'info');
+                    }
+                    
+                    // Apply replacement to only the targeted element
+                    if (this.replaceContent(targetElement, config)) {
+                        successCount = 1;
+                        this.log(`✅ Applied text replacement to 1 specific element out of ${elements.length} matches (${selector})`, 'success');
+                    }
+                } else {
+                    // For non-text replacement actions or single element matches,
+                    // apply to all matching elements as before
+                    elements.forEach(element => {
+                        if (this.replaceContent(element, config)) {
+                            successCount++;
+                        }
+                    });
+                    
+                    if (successCount > 0) {
+                        this.log(`✅ Applied action to ${successCount}/${elements.length} elements (${selector})`, 'success');
+                    }
+                }
+                
+                return successCount > 0;
+            }
+
+            replaceContent(element, config) {
+                if (!element || (!config.newText && config.newText !== '')) return false;
+                
+                try {
+                    const newText = config.newText;
+                    const originalText = config.originalText;
+                    
+                    this.log(`🔄 Replacing content in ${element.tagName.toLowerCase()} element`, 'info');
+                    
+                    if (originalText && element.textContent.includes(originalText)) {
+                        element.textContent = element.textContent.replace(originalText, newText);
+                    } else {
+                        element.textContent = newText;
+                    }
+                    
+                    return true;
+                } catch (e) {
+                    this.log(`Error replacing content: ${e.message}`, 'error');
+                    return false;
+                }
+            }
+
+            // For comparison: old behavior that replaces all matching elements
+            replaceAllMatching(selector, config) {
+                const elements = document.querySelectorAll(selector);
+                if (!elements?.length) {
+                    this.log(`No elements found for selector: ${selector}`, 'warning');
+                    return false;
+                }
+
+                let successCount = 0;
+                elements.forEach(element => {
+                    if (this.replaceContent(element, config)) {
+                        successCount++;
+                    }
+                });
+
+                this.log(`✅ OLD BEHAVIOR: Applied to ${successCount}/${elements.length} elements (${selector})`, 'info');
+                return successCount > 0;
+            }
+        }
+
+        const workflowSystem = new TestWorkflowSystem();
+
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+
+        function testReplaceAll() {
+            clearLog();
+            workflowSystem.log('=== Test 1: Replace All (OLD BEHAVIOR) ===', 'info');
+            workflowSystem.replaceAllMatching('.test-div', {
+                newText: 'REPLACED BY OLD METHOD'
+            });
+        }
+
+        function testReplaceSpecific() {
+            clearLog();
+            workflowSystem.log('=== Test 2: Replace Specific with originalText (NEW BEHAVIOR) ===', 'info');
+            workflowSystem.applySingleSelector('.test-div', {
+                newText: 'SMARTLY REPLACED!',
+                originalText: 'Original content in div 2'
+            });
+        }
+
+        function testReplaceFirst() {
+            clearLog();
+            workflowSystem.log('=== Test 3: Replace First without originalText (NEW BEHAVIOR) ===', 'info');
+            workflowSystem.applySingleSelector('.test-div', {
+                newText: 'REPLACED FIRST ELEMENT ONLY'
+            });
+        }
+
+        function resetContent() {
+            clearLog();
+            const divs = document.querySelectorAll('.test-div');
+            divs[0].textContent = 'Original content in div 1';
+            divs[1].textContent = 'Original content in div 2';
+            divs[2].textContent = 'Different content here';
+            divs[3].textContent = 'Original content in div 4';
+            workflowSystem.log('Content reset to original state', 'info');
+        }
+
+        // Initialize
+        workflowSystem.log('Smart Text Replacement Test initialized', 'info');
+        workflowSystem.log('Click the test buttons to see the difference between old and new behavior', 'info');
+    </script>
+</body>
+</html> 

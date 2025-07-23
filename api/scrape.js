@@ -101,7 +101,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Extract text elements
+    // Extract text elements, including divs and container elements
     $(mainContentSelector).find('*').each((_, el) => {
       const tag = el.type === 'tag' ? el.name : 'unknown';
       const text = $(el).text().trim();
@@ -126,22 +126,71 @@ export default async function handler(req, res) {
           if (classes) selector = `${tag}.${classes}`;
         }
 
-        textElements.push({
-          tag,
-          text: text.substring(0, 500), // Limit text length
-          selector,
-          attributes: Object.keys(attributes).length > 0 ? attributes : undefined
+        // For divs and container elements, be more inclusive to capture repeated content
+        let shouldInclude = true;
+        
+        // Apply uniqueness check only for non-container elements
+        if (tag !== 'div' && tag !== 'section' && tag !== 'article') {
+          const parentText = element.parent().text().trim();
+          shouldInclude = text !== parentText || element.children().length === 0;
+        }
+
+        if (shouldInclude) {
+          textElements.push({
+            tag,
+            text: text.substring(0, 500), // Limit text length
+            selector,
+            attributes: Object.keys(attributes).length > 0 ? attributes : undefined
+          });
+        }
+      }
+    });
+
+    // Filter noise first
+    const filteredElements = textElements.filter(element => {
+      const noiseTags = ['script', 'style', 'meta', 'link', 'head', 'html', 'body'];
+      return !noiseTags.includes(element.tag);
+    });
+
+    // Group elements by text content to detect duplicates
+    const textGroups = new Map();
+    filteredElements.forEach(element => {
+      const text = element.text.trim();
+      if (!textGroups.has(text)) {
+        textGroups.set(text, []);
+      }
+      textGroups.get(text).push(element);
+    });
+
+    // Process each group to add nth-of-type selectors for duplicates
+    const processedElements = [];
+    textGroups.forEach((elements, text) => {
+      if (elements.length === 1) {
+        // Single element with unique text - keep as is
+        processedElements.push(elements[0]);
+      } else {
+        // Multiple elements with same text - add nth-of-type selectors
+        console.log(`Found ${elements.length} elements with duplicate text: "${text.substring(0, 50)}..."`);
+        
+        elements.forEach((element, index) => {
+          // Generate nth-of-type selector
+          const nthSelector = `${element.tag}:nth-of-type(${index + 1})`;
+          
+          // Create enhanced element with nth-of-type selector
+          const enhancedElement = {
+            ...element,
+            selector: nthSelector,
+            nthPosition: index + 1,
+            totalSimilar: elements.length,
+            duplicateGroup: true
+          };
+
+          processedElements.push(enhancedElement);
         });
       }
     });
 
-    // Remove duplicates - no limit on results
-    const uniqueElements = textElements
-      .filter((element, index, self) => {
-        const isDuplicate = self.findIndex(e => e.text === element.text) !== index;
-        const noiseTags = ['script', 'style', 'meta', 'link', 'head', 'html', 'body'];
-        return !isDuplicate && !noiseTags.includes(element.tag);
-      });
+    const uniqueElements = processedElements;
 
     console.log(`✅ Extracted ${uniqueElements.length} unique elements`);
 

@@ -2,6 +2,30 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { getBestSelector, generateSelectorStrategies, validateSelector } from './selectorGenerator';
 
+/**
+ * Generate a contextual nth-of-type selector with parent context
+ */
+function generateContextualNthSelector(element: any, $: cheerio.CheerioAPI): string {
+  const tagName = element.name;
+  const parent = element.parent;
+  
+  if (parent && parent.type === 'tag' && parent.name !== 'body') {
+    const parentElement = $(parent);
+    const parentSelector = getBestSelector(parent, $).selector;
+    const siblings = parentElement.children(tagName);
+    const index = siblings.index(element) + 1;
+    
+    if (index > 0) {
+      return `${parentSelector} > ${tagName}:nth-of-type(${index})`;
+    }
+  }
+  
+  // Fallback to simple nth-of-type
+  const allSiblings = $(`${tagName}`);
+  const globalIndex = allSiblings.index(element) + 1;
+  return `${tagName}:nth-of-type(${globalIndex})`;
+}
+
 export interface ScrapedElement {
   tag: string;
   text: string;
@@ -15,6 +39,10 @@ export interface ScrapedElement {
   }>;
   fallbackSelectors?: string[];
   selectorReliability?: number;
+  // Properties for duplicate element tracking
+  nthPosition?: number;
+  totalSimilar?: number;
+  duplicateGroup?: boolean;
 }
 
 export interface ScrapingResult {
@@ -28,6 +56,7 @@ export interface ScrapingResult {
     mainContentSelector: string;
     totalElements: number;
     filteredElements: number;
+    uniqueTextGroups?: number;
   };
 }
 
@@ -107,6 +136,7 @@ export async function scrapeWebpageEnhanced(url: string): Promise<ScrapingResult
       const tag = el.type === 'tag' ? el.name : 'unknown';
       const text = $(el).text().trim();
 
+      // Include elements with text content, including divs and other container elements
       if (text && text.length > 1) {
         const element = $(el);
         const attributes: Record<string, string> = {};
@@ -130,9 +160,16 @@ export async function scrapeWebpageEnhanced(url: string): Promise<ScrapingResult
         const selectorInfo = getBestSelector(el, $);
         const strategies = generateSelectorStrategies(el, $);
         
-        // Check if this is unique content (not duplicated by parent)
-        const parentText = element.parent().text().trim();
-        const isUnique = text !== parentText || element.children().length === 0;
+        // For divs and container elements, be more inclusive in what we consider "unique"
+        // This allows us to capture divs with repeated content
+        let isUnique = true;
+        
+        if (tag !== 'div' && tag !== 'section' && tag !== 'article') {
+          // For non-container elements, use the existing uniqueness check
+          const parentText = element.parent().text().trim();
+          isUnique = text !== parentText || element.children().length === 0;
+        }
+        // For divs and container elements, always include them if they have text content
 
         if (isUnique) {
           textElements.push({
@@ -291,25 +328,85 @@ export async function scrapeWebpageEnhanced(url: string): Promise<ScrapingResult
       });
     }
 
-    // Remove duplicates and filter noise
-    const uniqueElements = textElements.filter((element, index, self) => {
-      const isDuplicate = self.findIndex(e => e.text === element.text) !== index;
+    // Filter noise first
+    const filteredElements = textElements.filter(element => {
       const noiseTags = ['script', 'style', 'meta', 'link', 'head', 'html', 'body'];
-      return !isDuplicate && !noiseTags.includes(element.tag);
+      return !noiseTags.includes(element.tag);
     });
 
-    console.log(`Final result: ${uniqueElements.length} unique elements`);
+    // Group elements by text content to detect duplicates
+    const textGroups = new Map<string, ScrapedElement[]>();
+    filteredElements.forEach(element => {
+      const text = element.text.trim();
+      if (!textGroups.has(text)) {
+        textGroups.set(text, []);
+      }
+      textGroups.get(text)!.push(element);
+    });
+
+    // Process each group to add nth-of-type selectors for duplicates
+    const processedElements: ScrapedElement[] = [];
+    textGroups.forEach((elements, text) => {
+      if (elements.length === 1) {
+        // Single element with unique text - keep as is
+        processedElements.push(elements[0]);
+      } else {
+        // Multiple elements with same text - add nth-of-type selectors
+        console.log(`Found ${elements.length} elements with duplicate text: "${text.substring(0, 50)}..."`);
+        
+        elements.forEach((element, index) => {
+          // Generate nth-of-type selector
+          const nthSelector = `${element.tag}:nth-of-type(${index + 1})`;
+          
+          // Create enhanced strategies with nth-of-type
+          const enhancedStrategies = [
+            {
+              selector: nthSelector,
+              type: 'nth-of-type',
+              reliability: 0.8,
+              description: `nth-of-type selector for duplicate ${index + 1} of ${elements.length}`
+            },
+            ...(element.selectorStrategies || [])
+          ];
+
+          // Also add contextual nth-of-type if we have parent context
+          const contextualNthSelector = generateContextualNthSelector(element, $);
+          if (contextualNthSelector && contextualNthSelector !== nthSelector) {
+            enhancedStrategies.unshift({
+              selector: contextualNthSelector,
+              type: 'contextual-nth',
+              reliability: 0.9,
+              description: `Contextual nth-of-type selector for duplicate ${index + 1}`
+            });
+          }
+
+          processedElements.push({
+            ...element,
+            selector: contextualNthSelector || nthSelector, // Use contextual if available
+            selectorStrategies: enhancedStrategies,
+            fallbackSelectors: [
+              ...(element.fallbackSelectors || []),
+              nthSelector,
+              element.selector || element.tag
+            ].filter((sel, idx, arr) => arr.indexOf(sel) === idx) // Remove duplicates
+          });
+        });
+      }
+    });
+
+    console.log(`Final result: ${processedElements.length} elements (${textGroups.size} unique text groups)`);
 
     return {
       success: true,
-      data: uniqueElements,
+      data: processedElements,
       url: targetUrl,
       timestamp: new Date(),
       debugInfo: {
         htmlLength: html.length,
         mainContentSelector,
         totalElements: textElements.length,
-        filteredElements: uniqueElements.length
+        filteredElements: processedElements.length,
+        uniqueTextGroups: textGroups.size
       }
     };
 

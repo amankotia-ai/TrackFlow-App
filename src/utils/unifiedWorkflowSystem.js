@@ -825,7 +825,7 @@
         const success = this.applySingleSelector(config.selector, {
           newText: config.newText,
           originalText: config.originalText
-        });
+        }, true, 'replaceText');
         
         if (success) {
           this.completedModifications.add(`replaceText:${config.selector}`);
@@ -902,7 +902,7 @@
     /**
      * Apply a single selector efficiently (adapted from utm-magic.js)
      */
-    applySingleSelector(selector, config, preventDuplicates = true) {
+    applySingleSelector(selector, config, preventDuplicates = true, actionType = null) {
       const selectorKey = `${selector}-${JSON.stringify(config)}`;
       
       if (preventDuplicates && this.processedSelectors.has(selectorKey)) {
@@ -921,17 +921,56 @@
         
         let successCount = 0;
         
-        elements.forEach(element => {
-          if (this.replaceContent(element, config)) {
-            successCount++;
+        // For text replacement actions, we need special handling to avoid
+        // replacing content in multiple identical elements when targeting text content
+        const isTextReplacement = config.newText !== undefined || config.originalText !== undefined;
+        
+        if (isTextReplacement && elements.length > 1) {
+          this.log(`🎯 Text replacement detected with ${elements.length} matching elements. Applying smart targeting...`, 'info');
+          
+          // Try to find the most specific element to replace
+          let targetElement = null;
+          
+          // Strategy 1: If originalText is provided, find the element containing that exact text
+          if (config.originalText) {
+            for (const element of elements) {
+              if (element.textContent && element.textContent.includes(config.originalText)) {
+                targetElement = element;
+                this.log(`🎯 Found element with original text: "${config.originalText}"`, 'success');
+                break;
+              }
+            }
           }
-        });
+          
+          // Strategy 2: If no originalText match, use the first element
+          if (!targetElement) {
+            targetElement = elements[0];
+            this.log(`🎯 Using first matching element for text replacement`, 'info');
+          }
+          
+          // Apply replacement to only the targeted element
+          if (this.replaceContent(targetElement, config)) {
+            successCount = 1;
+            this.log(`✅ Applied text replacement to 1 specific element out of ${elements.length} matches (${selector})`, 'success');
+          }
+        } else {
+          // For non-text replacement actions (hide, show, css, etc.) or single element matches,
+          // apply to all matching elements as before
+          elements.forEach(element => {
+            if (this.replaceContent(element, config)) {
+              successCount++;
+            }
+          });
+          
+          if (successCount > 0) {
+            this.log(`✅ Applied action to ${successCount}/${elements.length} elements (${selector})`, 'success');
+          }
+        }
         
         if (successCount > 0) {
           if (preventDuplicates) {
             this.processedSelectors.add(selectorKey);
           }
-          this.log(`✅ Applied content replacement to ${successCount}/${elements.length} elements (${selector})`, 'success');
           return true;
         }
         
