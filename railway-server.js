@@ -37,11 +37,11 @@ console.log('🔑 Supabase Anon Key:', supabaseKey ? 'Set ✅' : 'Missing ❌');
 console.log('🔑 Supabase Service Role Key:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Set ✅' : 'Missing ❌ (using anon key as fallback)');
 
 // Check if frontend was built
-const distExists = fs.existsSync(path.join(__dirname, 'dist'));
-const indexExists = fs.existsSync(path.join(__dirname, 'dist', 'index.html'));
+const buildExists = fs.existsSync(path.join(__dirname, 'build'));
+const indexExists = fs.existsSync(path.join(__dirname, 'build', 'index.html'));
 console.log('🏗️ Frontend Build Status:');
-console.log('   📁 dist/ directory:', distExists ? 'Exists ✅' : 'Missing ❌');
-console.log('   📄 dist/index.html:', indexExists ? 'Exists ✅' : 'Missing ❌');
+console.log('   📁 build/ directory:', buildExists ? 'Exists ✅' : 'Missing ❌');
+console.log('   📄 build/index.html:', indexExists ? 'Exists ✅' : 'Missing ❌');
 
 // CORS for all origins
 app.use(cors({
@@ -61,8 +61,8 @@ app.options('*', (req, res) => {
   res.status(200).end();
 });
 
-// Serve static files from the dist directory
-app.use(express.static(path.join(__dirname, 'dist')));
+// Serve static files from the build directory
+app.use(express.static(path.join(__dirname, 'build')));
 
 // Serve test HTML files from root directory
 app.use(express.static(__dirname, { 
@@ -728,10 +728,10 @@ app.get('*', (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
   
-  // Check if dist directory exists
-  const distPath = path.join(__dirname, 'dist', 'index.html');
-  if (!fs.existsSync(distPath)) {
-    console.error('❌ Frontend not built: dist/index.html not found');
+  // Check if build directory exists
+  const buildPath = path.join(__dirname, 'build', 'index.html');
+  if (!fs.existsSync(buildPath)) {
+    console.error('❌ Frontend not built: build/index.html not found');
     console.log('📁 Available files in current directory:', fs.readdirSync(__dirname));
     
     // Serve a basic API-focused landing page instead of 503
@@ -785,7 +785,7 @@ app.get('*', (req, res) => {
   }
   
   // Serve the React app
-  res.sendFile(distPath);
+  res.sendFile(buildPath);
 });
 
 app.listen(PORT, () => {
