@@ -12,8 +12,6 @@
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "start": "node railway-server.js",
-    "railway": "node railway-server.js",
-    "vercel-build": "echo 'No build step required for serverless'",
     "postinstall": "echo 'Dependencies installed successfully'",
     "lint": "eslint .",
     "preview": "vite preview"
