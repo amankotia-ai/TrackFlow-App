@@ -519,35 +519,32 @@ export const nodeTemplates: NodeTemplate[] = [
   {
     id: 'geolocation-trigger',
     type: 'trigger',
-    category: 'Context',
+    category: 'Location',
     name: 'Geolocation',
-    description: 'Trigger based on visitor\'s geographic location',
+    description: 'Trigger based on visitor\'s geographic location and network details',
     icon: 'MapPin',
     defaultConfig: {
-      locationType: 'country',
-      locations: '',
-      operator: 'includes'
+      geoField: 'country',
+      operator: 'equals',
+      values: ''
     },
     configFields: [
       { 
-        key: 'locationType', 
+        key: 'geoField', 
         type: 'select', 
-        label: 'Location Type', 
+        label: 'Geographic Field', 
         required: true, 
         options: [
-          { value: 'country', label: 'Country' },
-          { value: 'region', label: 'State/Region' },
-          { value: 'city', label: 'City' }
+          { value: 'country', label: 'Country (e.g., India, United States)' },
+          { value: 'countryCode', label: 'Country Code (e.g., IN, US)' },
+          { value: 'region', label: 'Region/State (e.g., Maharashtra, California)' },
+          { value: 'city', label: 'City (e.g., Mumbai, New York)' },
+          { value: 'timezone', label: 'Time Zone (e.g., Asia/Kolkata)' },
+          { value: 'isp', label: 'ISP/Organization (e.g., Airtel Broadband)' },
+          { value: 'ipType', label: 'IP Type (Residential, Business, Mobile)' }
         ],
-        default: 'country'
-      },
-      { 
-        key: 'locations', 
-        type: 'textarea', 
-        label: 'Target Locations', 
-        required: true, 
-        placeholder: 'United States\nCanada\nUnited Kingdom',
-        description: 'List of locations (one per line)'
+        default: 'country',
+        description: 'Choose which geographic or network parameter to evaluate'
       },
       { 
         key: 'operator', 
@@ -555,10 +552,21 @@ export const nodeTemplates: NodeTemplate[] = [
         label: 'Condition', 
         required: true, 
         options: [
-          { value: 'includes', label: 'Is in list' },
-          { value: 'excludes', label: 'Is not in list' }
+          { value: 'equals', label: 'Equals (exact match)' },
+          { value: 'contains', label: 'Contains (partial match)' },
+          { value: 'excludes', label: 'Does not equal' },
+          { value: 'exists', label: 'Has any value' }
         ],
-        default: 'includes'
+        default: 'equals',
+        description: 'How to compare the visitor\'s location data'
+      },
+      { 
+        key: 'values', 
+        type: 'textarea', 
+        label: 'Target Values', 
+        required: true, 
+        placeholder: 'India\nUnited States\nCanada',
+        description: 'List of target values (one per line or comma-separated). Examples:\n• Countries: India, United States, Canada\n• Cities: Mumbai, New York, London\n• ISPs: Airtel, Comcast, BT\n• IP Types: Residential, Business, Mobile'
       }
     ]
   },

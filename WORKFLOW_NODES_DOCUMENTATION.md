@@ -176,17 +176,31 @@ This document provides comprehensive documentation for all available trigger and
 #### 10. Geolocation
 **Category**: Location  
 **Icon**: MapPin  
-**Description**: Trigger based on visitor's geographic location
+**Description**: Trigger based on visitor's geographic location and network details
 
 **Configuration Options**:
-- **Location Type** (required): Country, State/Region, or City
-- **Target Locations** (required): List of locations (one per line)
-- **Condition** (required): Is in list or Is not in list
+- **Geographic Field** (required): Choose from:
+  - Country (e.g., India, United States)
+  - Country Code (e.g., IN, US)
+  - Region/State (e.g., Maharashtra, California)
+  - City (e.g., Mumbai, New York)
+  - Time Zone (e.g., Asia/Kolkata)
+  - ISP/Organization (e.g., Airtel Broadband)
+  - IP Type (Residential, Business, Mobile)
+- **Condition** (required): Equals, Contains, Does not equal, or Has any value
+- **Target Values** (required): List of target values (one per line or comma-separated)
+
+**Available Data Fields**:
+- Country, Country Code, Region/State, City, Postal Code
+- Time Zone, Latitude/Longitude coordinates
+- ISP/Organization, ASN, IP Type classification
 
 **Use Cases**:
 - Show location-specific offers and pricing
 - Display regional content and languages
 - Comply with location-based regulations
+- Target specific ISPs or connection types
+- Time zone-based content personalization
 
 ---
 

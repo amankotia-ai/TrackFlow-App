@@ -28,6 +28,7 @@
       this.executedWorkflows = new Set(); // Track executed workflows to prevent duplicates
       this.triggeredWorkflows = new Map(); // Cache triggered workflows to prevent re-triggering
       this.processingWorkflows = false; // Flag to prevent recursive processWorkflows calls
+      this.geolocationData = null; // Initialize geolocation data
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
       this.contentHidden = false;
@@ -85,6 +86,9 @@
       try {
         this.log('🚀 Initializing unified workflow system...');
         
+        // Fetch geolocation data first (for geo-based triggers)
+        await this.fetchGeolocationData();
+        
         // Fetch all active workflows first - this is CRITICAL
         await this.fetchWorkflows();
         this.log(`📊 Workflows loaded: ${this.workflows.size} workflows available`);
@@ -114,6 +118,129 @@
         this.log(`❌ Initialization failed: ${error.message}`, 'error');
         this.showContent(); // Show content even if initialization fails
       }
+    }
+
+    /**
+     * Fetch geolocation data using IP-based service
+     */
+    async fetchGeolocationData() {
+      // Check if geolocation data is already cached in session
+      const cached = sessionStorage.getItem('workflow_geolocation_data');
+      if (cached) {
+        try {
+          this.geolocationData = JSON.parse(cached);
+          this.log('🌍 Using cached geolocation data', 'info', this.geolocationData);
+          return;
+        } catch (e) {
+          this.log('⚠️ Invalid cached geolocation data, fetching fresh', 'warning');
+        }
+      }
+
+      try {
+        this.log('🌍 Fetching geolocation data...');
+        
+        // Try ipapi.co first (free, reliable)
+        let geoData = null;
+        try {
+          const response = await fetch('https://ipapi.co/json/', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            geoData = {
+              country: data.country_name || '',
+              countryCode: data.country_code || '',
+              region: data.region || '',
+              city: data.city || '',
+              postalCode: data.postal || '',
+              timezone: data.timezone || '',
+              latitude: data.latitude || 0,
+              longitude: data.longitude || 0,
+              isp: data.org || '',
+              ipType: this.determineIPType(data.org || ''),
+              asn: data.asn || ''
+            };
+          }
+        } catch (error) {
+          this.log(`⚠️ ipapi.co failed: ${error.message}`, 'warning');
+        }
+
+        // Fallback to ip-api.com if ipapi.co fails
+        if (!geoData) {
+          try {
+            const response = await fetch('http://ip-api.com/json/', {
+              method: 'GET'
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.status === 'success') {
+                geoData = {
+                  country: data.country || '',
+                  countryCode: data.countryCode || '',
+                  region: data.regionName || '',
+                  city: data.city || '',
+                  postalCode: data.zip || '',
+                  timezone: data.timezone || '',
+                  latitude: data.lat || 0,
+                  longitude: data.lon || 0,
+                  isp: data.isp || '',
+                  ipType: this.determineIPType(data.isp || ''),
+                  asn: data.as || ''
+                };
+              }
+            }
+          } catch (error) {
+            this.log(`⚠️ ip-api.com also failed: ${error.message}`, 'warning');
+          }
+        }
+
+        if (geoData) {
+          this.geolocationData = geoData;
+          // Cache for the session to avoid repeated API calls
+          sessionStorage.setItem('workflow_geolocation_data', JSON.stringify(geoData));
+          this.log('🌍 Geolocation data fetched successfully', 'success', geoData);
+        } else {
+          this.log('❌ Failed to fetch geolocation data from all sources', 'error');
+          // Set minimal fallback data
+          this.geolocationData = {
+            country: '',
+            countryCode: '',
+            region: '',
+            city: '',
+            postalCode: '',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+            latitude: 0,
+            longitude: 0,
+            isp: '',
+            ipType: '',
+            asn: ''
+          };
+        }
+        
+      } catch (error) {
+        this.log(`❌ Geolocation fetch error: ${error.message}`, 'error');
+        this.geolocationData = null;
+      }
+    }
+
+    /**
+     * Determine IP type based on ISP/Organization name
+     */
+    determineIPType(orgName) {
+      const org = orgName.toLowerCase();
+      if (org.includes('mobile') || org.includes('cellular') || org.includes('wireless')) {
+        return 'Mobile';
+      } else if (org.includes('business') || org.includes('enterprise') || org.includes('corporate')) {
+        return 'Business';
+      } else if (org.includes('residential') || org.includes('broadband') || org.includes('cable')) {
+        return 'Residential';
+      }
+      return 'Unknown';
     }
 
     /**
@@ -583,6 +710,10 @@
           shouldTrigger = this.evaluateExitIntentTrigger(config, eventData);
           break;
           
+        case 'Geolocation':
+          shouldTrigger = this.evaluateGeolocationTrigger(config, eventData);
+          break;
+          
         default:
           this.log(`⚠️ Unknown trigger type: ${triggerType}`, 'warning');
           shouldTrigger = false;
@@ -654,6 +785,80 @@
      */
     evaluateExitIntentTrigger(config, eventData) {
       return eventData.eventType === 'exit_intent';
+    }
+
+    /**
+     * Evaluate geolocation trigger
+     */
+    evaluateGeolocationTrigger(config, eventData) {
+      if (!this.geolocationData) {
+        this.log('⚠️ Geolocation data not available for trigger evaluation', 'warning');
+        return false;
+      }
+
+      const { geoField, operator, values } = config;
+      
+      if (!geoField || !values) {
+        this.log('⚠️ Geolocation trigger: Missing required config (geoField or values)', 'warning');
+        return false;
+      }
+
+      // Get the field value from geolocation data
+      let fieldValue = '';
+      switch (geoField) {
+        case 'country':
+          fieldValue = this.geolocationData.country || '';
+          break;
+        case 'countryCode':
+          fieldValue = this.geolocationData.countryCode || '';
+          break;
+        case 'region':
+          fieldValue = this.geolocationData.region || '';
+          break;
+        case 'city':
+          fieldValue = this.geolocationData.city || '';
+          break;
+        case 'timezone':
+          fieldValue = this.geolocationData.timezone || '';
+          break;
+        case 'isp':
+          fieldValue = this.geolocationData.isp || '';
+          break;
+        case 'ipType':
+          fieldValue = this.geolocationData.ipType || '';
+          break;
+        default:
+          this.log(`⚠️ Unknown geolocation field: ${geoField}`, 'warning');
+          return false;
+      }
+
+      // Parse target values (comma or newline separated)
+      const targetValues = values.split(/[,\n]/).map(v => v.trim().toLowerCase()).filter(v => v);
+      const currentValue = fieldValue.toLowerCase();
+
+      this.log(`🌍 Geolocation evaluation: ${geoField}="${currentValue}" ${operator} [${targetValues.join(', ')}]`, 'info');
+
+      let isMatch = false;
+      switch (operator) {
+        case 'equals':
+          isMatch = targetValues.includes(currentValue);
+          break;
+        case 'contains':
+          isMatch = targetValues.some(target => currentValue.includes(target) || target.includes(currentValue));
+          break;
+        case 'excludes':
+          isMatch = !targetValues.includes(currentValue);
+          break;
+        case 'exists':
+          isMatch = Boolean(fieldValue);
+          break;
+        default:
+          this.log(`⚠️ Unknown geolocation operator: ${operator}`, 'warning');
+          return false;
+      }
+
+      this.log(`🌍 Geolocation trigger result: ${isMatch}`, isMatch ? 'success' : 'info');
+      return isMatch;
     }
 
     /**
@@ -1158,7 +1363,8 @@
         utm,
         referrer: document.referrer,
         userAgent: navigator.userAgent,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        geolocation: this.geolocationData // Add geolocation data
       };
     }
 
