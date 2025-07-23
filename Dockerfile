@@ -10,9 +10,10 @@ COPY package-railway.json package.json
 # Install dependencies
 RUN npm install --only=production
 
-# Copy source code
+# Copy source code and built frontend
 COPY railway-server.js .
 COPY src/ ./src/
+COPY build/ ./build/
 
 # Create necessary directories
 RUN mkdir -p public api
