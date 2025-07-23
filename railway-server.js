@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
-import hierarchicalScrapeHandler from './api/hierarchical-scrape.js';
+// Dynamic import will be used for hierarchical scrape to avoid module resolution issues
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -723,8 +723,18 @@ app.post('/api/scrape', async (req, res) => {
 });
 
 // Hierarchical scraping endpoint
-app.all('/api/hierarchical-scrape', (req, res) => {
-  hierarchicalScrapeHandler(req, res);
+app.all('/api/hierarchical-scrape', async (req, res) => {
+  try {
+    const { default: hierarchicalScrapeHandler } = await import('./api/hierarchical-scrape.js');
+    hierarchicalScrapeHandler(req, res);
+  } catch (error) {
+    console.error('Failed to load hierarchical scrape handler:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Hierarchical scraping service unavailable',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // SPA fallback - serve React app for all non-API routes
