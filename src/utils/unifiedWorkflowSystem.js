@@ -2,6 +2,7 @@
  * Unified Workflow System
  * Single, robust system for workflow automation
  * Eliminates the complexity of dual execution paths
+ * Enhanced with unique element targeting capabilities
  */
 
 (function() {
@@ -1108,9 +1109,184 @@
     }
 
     /**
-     * Apply a single selector efficiently (adapted from utm-magic.js)
+     * Enhanced element targeting using the new targeting system
      */
-    applySingleSelector(selector, config, preventDuplicates = true, actionType = null) {
+    targetElementWithStrategies(elementData, actionConfig, actionType) {
+      // Check if we have enhanced element data with selector strategies
+      if (elementData && elementData.selectorStrategies) {
+        return this.resolveElementWithStrategies(elementData.selectorStrategies, {
+          originalText: actionConfig.originalText,
+          textContent: elementData.text,
+          position: elementData.position?.indexInParent,
+          attributes: elementData.attributes
+        }, actionType);
+      }
+      
+      // Fallback to legacy selector handling
+      return this.resolveLegacySelector(actionConfig.selector || elementData?.selector, actionConfig, actionType);
+    }
+
+    /**
+     * Resolve element using enhanced selector strategies
+     */
+    resolveElementWithStrategies(strategies, context, actionType) {
+      this.log(`🎯 Enhanced Targeting: Resolving element for ${actionType} using ${strategies.length} strategies`, 'info');
+      
+      // Try each strategy in order of reliability
+      for (const strategy of strategies) {
+        const elements = document.querySelectorAll(strategy.selector);
+        this.log(`🔍 Strategy ${strategy.type}: "${strategy.selector}" (${elements.length} matches)`);
+        
+        if (elements.length === 0) continue;
+        
+        if (elements.length === 1) {
+          this.log(`✅ Unique element found with ${strategy.type} selector`, 'success');
+          return {
+            success: true,
+            element: elements[0],
+            elements: Array.from(elements),
+            strategy,
+            message: `Found unique element using ${strategy.description}`
+          };
+        }
+        
+        // Multiple elements found - apply disambiguation
+        const disambiguated = this.disambiguateElements(Array.from(elements), context, actionType);
+        
+        if (disambiguated.success) {
+          this.log(`✅ Element disambiguated using ${strategy.type} selector with ${disambiguated.method}`, 'success');
+          return {
+            success: true,
+            element: disambiguated.element,
+            elements: Array.from(elements),
+            strategy,
+            message: `Found target element using ${strategy.description} with ${disambiguated.method}`,
+            fallbackUsed: true
+          };
+        }
+      }
+      
+      this.log(`❌ Enhanced targeting failed - no strategies resolved to a unique element`, 'error');
+      return {
+        success: false,
+        element: null,
+        elements: [],
+        strategy: null,
+        message: 'No targeting strategy could resolve to a unique element'
+      };
+    }
+
+    /**
+     * Disambiguate between multiple matching elements
+     */
+    disambiguateElements(elements, context, actionType) {
+      this.log(`🎯 Disambiguating ${elements.length} elements for ${actionType} action`);
+      
+      // Strategy 1: Text content matching (for text-related actions)
+      if (context.originalText && (actionType.includes('text') || actionType.includes('Text'))) {
+        for (const element of elements) {
+          if (element.textContent && element.textContent.includes(context.originalText)) {
+            this.log(`🎯 Found element by original text: "${context.originalText}"`, 'success');
+            return { success: true, element, method: 'original text matching' };
+          }
+        }
+      }
+      
+      // Strategy 2: Exact text content matching
+      if (context.textContent) {
+        for (const element of elements) {
+          if (element.textContent && element.textContent.trim() === context.textContent.trim()) {
+            this.log(`🎯 Found element by exact text content`, 'success');
+            return { success: true, element, method: 'exact text content matching' };
+          }
+        }
+      }
+      
+      // Strategy 3: Position-based selection
+      if (context.position !== undefined && context.position >= 0 && context.position < elements.length) {
+        this.log(`🎯 Using position-based selection: index ${context.position}`, 'info');
+        return { success: true, element: elements[context.position], method: `position ${context.position}` };
+      }
+      
+      // Strategy 4: First element fallback (for non-text actions)
+      if (!actionType.includes('text') && !actionType.includes('Text')) {
+        this.log(`🎯 Using first element for non-text action: ${actionType}`, 'info');
+        return { success: true, element: elements[0], method: 'first element fallback' };
+      }
+      
+      // Strategy 5: Most visible element
+      const visibleElements = elements.filter(el => {
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && 
+               style.visibility !== 'hidden' && 
+               style.opacity !== '0' &&
+               el.offsetWidth > 0 && 
+               el.offsetHeight > 0;
+      });
+      
+      if (visibleElements.length === 1) {
+        this.log(`🎯 Found unique visible element`, 'success');
+        return { success: true, element: visibleElements[0], method: 'visibility filtering' };
+      }
+      
+      this.log(`❌ Could not disambiguate elements`, 'warning');
+      return { success: false, element: null, method: 'no disambiguation method worked' };
+    }
+
+    /**
+     * Legacy selector resolution for backward compatibility
+     */
+    resolveLegacySelector(selector, config, actionType) {
+      const elements = document.querySelectorAll(selector);
+      
+      if (elements.length === 0) {
+        return { success: false, element: null, elements: [], message: 'No elements found' };
+      }
+      
+      if (elements.length === 1) {
+        return { success: true, element: elements[0], elements: Array.from(elements), message: 'Single element found' };
+      }
+      
+      // Apply legacy smart targeting for text replacement
+      if ((config.newText !== undefined || config.originalText !== undefined) && actionType.includes('Text')) {
+        let targetElement = null;
+        
+        if (config.originalText) {
+          for (const element of elements) {
+            if (element.textContent && element.textContent.includes(config.originalText)) {
+              targetElement = element;
+              break;
+            }
+          }
+        }
+        
+        if (!targetElement) {
+          targetElement = elements[0];
+        }
+        
+        return { 
+          success: true, 
+          element: targetElement, 
+          elements: Array.from(elements), 
+          message: 'Legacy smart targeting used',
+          fallbackUsed: true 
+        };
+      }
+      
+      // For other actions, use first element
+      return { 
+        success: true, 
+        element: elements[0], 
+        elements: Array.from(elements), 
+        message: 'First element used as fallback',
+        fallbackUsed: true 
+      };
+    }
+
+    /**
+     * Apply a single selector efficiently with enhanced targeting
+     */
+    applySingleSelector(selector, config, preventDuplicates = true, actionType = null, elementData = null) {
       const selectorKey = `${selector}-${JSON.stringify(config)}`;
       
       if (preventDuplicates && this.processedSelectors.has(selectorKey)) {
@@ -1119,60 +1295,39 @@
       }
       
       try {
-        const elements = document.querySelectorAll(selector);
-        if (!elements?.length) {
+        // Use enhanced targeting if element data is available
+        let targetingResult;
+        
+        if (elementData && elementData.selectorStrategies) {
+          targetingResult = this.targetElementWithStrategies(elementData, config, actionType || 'Unknown');
+        } else {
+          targetingResult = this.resolveLegacySelector(selector, config, actionType || 'Unknown');
+        }
+        
+        if (!targetingResult.success || !targetingResult.element) {
           this.log(`No elements found for selector: ${selector}`, 'warning');
-          // Add explicit browser console warning:
           console.warn(`No elements found for selector: ${selector}`);
           return false;
         }
         
-        let successCount = 0;
+        // Apply the action to the resolved element
+        const success = this.replaceContent(targetingResult.element, config);
         
-        // For text replacement actions, we need special handling to avoid
-        // replacing content in multiple identical elements when targeting text content
-        const isTextReplacement = config.newText !== undefined || config.originalText !== undefined;
-        
-        if (isTextReplacement && elements.length > 1) {
-          this.log(`🎯 Text replacement detected with ${elements.length} matching elements. Applying smart targeting...`, 'info');
+        if (success) {
+          const message = targetingResult.fallbackUsed 
+            ? `Applied action using ${targetingResult.message} (${targetingResult.elements.length} total matches)`
+            : `Applied action to unique element`;
           
-          // Try to find the most specific element to replace
-          let targetElement = null;
+          this.log(`✅ ${message} (${selector})`, 'success');
           
-          // Strategy 1: If originalText is provided, find the element containing that exact text
-          if (config.originalText) {
-            for (const element of elements) {
-              if (element.textContent && element.textContent.includes(config.originalText)) {
-                targetElement = element;
-                this.log(`🎯 Found element with original text: "${config.originalText}"`, 'success');
-                break;
-              }
-            }
+          if (preventDuplicates) {
+            this.processedSelectors.add(selectorKey);
           }
           
-          // Strategy 2: If no originalText match, use the first element
-          if (!targetElement) {
-            targetElement = elements[0];
-            this.log(`🎯 Using first matching element for text replacement`, 'info');
-          }
-          
-          // Apply replacement to only the targeted element
-          if (this.replaceContent(targetElement, config)) {
-            successCount = 1;
-            this.log(`✅ Applied text replacement to 1 specific element out of ${elements.length} matches (${selector})`, 'success');
-          }
+          return true;
         } else {
-          // For non-text replacement actions (hide, show, css, etc.) or single element matches,
-          // apply to all matching elements as before
-          elements.forEach(element => {
-            if (this.replaceContent(element, config)) {
-              successCount++;
-            }
-          });
-          
-          if (successCount > 0) {
-            this.log(`✅ Applied action to ${successCount}/${elements.length} elements (${selector})`, 'success');
-          }
+          this.log(`❌ Failed to apply action to resolved element (${selector})`, 'error');
+          return false;
         }
         
         if (successCount > 0) {

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { X, ExternalLink, FileText, Layers, List, Target } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ExternalLink, FileText, Layers, List, Target, Monitor, TreePine, Grid } from 'lucide-react';
 import { ScrapingResult, ScrapedElement } from '../utils/scraper';
 import HierarchicalView from './HierarchicalView';
 import ElementSelectorModal from './ElementSelectorModal';
+import VisualDOMView from './VisualDOMView';
+import HierarchicalDOMView from './HierarchicalDOMView';
+import { useHierarchicalScraper } from '../hooks/useHierarchicalScraper';
 
 interface ScrapingResultsProps {
   result: ScrapingResult | null;
@@ -10,39 +13,75 @@ interface ScrapingResultsProps {
 }
 
 const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) => {
-  const [viewMode, setViewMode] = useState<'categorized' | 'hierarchical'>('hierarchical');
+  const [viewMode, setViewMode] = useState<'categorized' | 'hierarchical' | 'visual' | 'dom-tree'>('visual');
   const [isElementSelectorOpen, setIsElementSelectorOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const { scrapingResult: hierarchicalResult, isScraping: isScrapingHierarchical, scrapeUrl: scrapeHierarchical } = useHierarchicalScraper();
+  
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 300); // Match the slide-down animation duration
+  };
+  
+  // Trigger hierarchical scraping when DOM tree view is selected
+  useEffect(() => {
+    if (viewMode === 'dom-tree' && result?.url && !hierarchicalResult && !isScrapingHierarchical) {
+      scrapeHierarchical(result.url);
+    }
+  }, [viewMode, result?.url, hierarchicalResult, isScrapingHierarchical, scrapeHierarchical]);
   
   if (!result) return null;
 
   const categorizedElements = result.data ? categorizeElements(result.data) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <FileText className="w-5 h-5 text-primary-600" />
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Scraping Results
-              </h3>
-              <p className="text-sm text-gray-500">
-                {result.url} • {result.timestamp.toLocaleString()}
-              </p>
-            </div>
+    <>
+      {/* Backdrop */}
+      <div 
+        className={`fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ease-out ${
+          isClosing ? 'opacity-0' : 'opacity-100'
+        }`}
+        onClick={handleClose}
+      />
+      
+      {/* Bottom Sheet */}
+      <div className={`fixed inset-x-0 bottom-0 z-50 ${
+        isClosing ? 'animate-slide-down' : 'animate-slide-up'
+      }`}>
+        <div className="bg-white shadow-2xl max-h-[92vh] overflow-hidden border-t border-gray-200">
+          {/* Handle Bar */}
+          <div className="flex justify-center py-3 px-4 border-b border-gray-100 cursor-pointer" onClick={handleClose}>
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full bottom-sheet-handle"></div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
+          
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-primary-100 rounded-lg">
+                <FileText className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Scraping Results
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {result.url} • {result.timestamp.toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClose}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-all duration-200 hover:scale-105"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+          {/* Content */}
+          <div className="px-6 py-4 overflow-y-auto max-h-[calc(92vh-140px)] custom-scrollbar">
+            <div className="max-w-5xl mx-auto">
           {!result.success ? (
             <div className="text-center py-8">
               <div className="text-red-500 text-6xl mb-4">⚠️</div>
@@ -74,6 +113,17 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
               <div className="flex items-center justify-between">
                 <div className="flex space-x-2">
                   <button
+                    onClick={() => setViewMode('visual')}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      viewMode === 'visual'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Monitor className="w-4 h-4" />
+                    <span>Visual Layout</span>
+                  </button>
+                  <button
                     onClick={() => setViewMode('hierarchical')}
                     className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       viewMode === 'hierarchical'
@@ -95,6 +145,17 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
                     <List className="w-4 h-4" />
                     <span>Categories</span>
                   </button>
+                  <button
+                    onClick={() => setViewMode('dom-tree')}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      viewMode === 'dom-tree'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <TreePine className="w-4 h-4" />
+                    <span>DOM Tree</span>
+                  </button>
                 </div>
                 
                 {/* Element Selector Button */}
@@ -107,6 +168,19 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
                 </button>
               </div>
 
+              {/* Visual DOM View */}
+              {viewMode === 'visual' && result.data && (
+                <VisualDOMView 
+                  elements={result.data}
+                  onElementSelect={(element, selector) => {
+                    console.log('Selected element:', element);
+                    console.log('Selected selector:', selector);
+                    // You can integrate this with your workflow system
+                    setIsElementSelectorOpen(true);
+                  }}
+                />
+              )}
+
               {/* Hierarchical View */}
               {viewMode === 'hierarchical' && result.hierarchy && (
                 <HierarchicalView 
@@ -115,6 +189,42 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
                     console.log('Selected element:', element);
                   }}
                 />
+              )}
+
+              {/* DOM Tree View */}
+              {viewMode === 'dom-tree' && (
+                <div className="space-y-4">
+                  {isScrapingHierarchical ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <TreePine className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-pulse" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">Building DOM Tree</h3>
+                        <p className="text-gray-500">Analyzing website structure...</p>
+                      </div>
+                    </div>
+                  ) : hierarchicalResult?.success && hierarchicalResult.data ? (
+                    <HierarchicalDOMView 
+                      elements={hierarchicalResult.data}
+                      onElementSelect={(element, selector) => {
+                        console.log('Selected hierarchical element:', element);
+                        console.log('Selected selector:', selector);
+                        // Removed the setIsElementSelectorOpen(true) to prevent opening modal on row click
+                      }}
+                    />
+                  ) : hierarchicalResult && !hierarchicalResult.success ? (
+                    <div className="text-center py-12">
+                      <div className="text-red-500 text-6xl mb-4">🌳</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to Build DOM Tree</h3>
+                      <p className="text-gray-500">{hierarchicalResult.error}</p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-gray-400 text-6xl mb-4">🌳</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No DOM Tree Data</h3>
+                      <p className="text-gray-500">Try refreshing or selecting this view again.</p>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Categorized View */}
@@ -185,6 +295,8 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
               </details>
             </div>
           )}
+            </div>
+          </div>
         </div>
       </div>
       
@@ -203,7 +315,7 @@ const ScrapingResults: React.FC<ScrapingResultsProps> = ({ result, onClose }) =>
           }}
         />
       )}
-    </div>
+    </>
   );
 };
 

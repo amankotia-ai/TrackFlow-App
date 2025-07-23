@@ -26,3 +26,266 @@
     overflow: hidden;
   }
 }
+
+/* Custom scrollbar styles */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Node connection styles */
+.react-flow__edge-path {
+  stroke: #6366f1;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #4f46e5;
+  stroke-width: 3;
+}
+
+/* Custom node styles */
+.workflow-node {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.workflow-node:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.workflow-node.selected {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Visual DOM View styles */
+.visual-dom-view {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Element hover info tooltip */
+.visual-dom-view .element-preview[data-info]:hover::after {
+  content: attr(data-info);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 100;
+  pointer-events: none;
+  transform: translateY(-4px);
+  opacity: 0;
+  animation: tooltip-fade-in 0.2s ease-out forwards;
+}
+
+.visual-dom-view .element-preview[data-info]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid rgba(0, 0, 0, 0.9);
+  z-index: 100;
+  pointer-events: none;
+  transform: translateY(-4px);
+  opacity: 0;
+  animation: tooltip-fade-in 0.2s ease-out forwards;
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+/* Visual DOM Container responsive layout */
+.visual-dom-container {
+  transition: max-width 0.3s ease;
+}
+
+/* Element preview hover effects */
+.element-preview {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.element-preview:hover {
+  transform: translateY(-1px);
+}
+
+/* Semantic element styling */
+.element-preview[data-tag="h1"],
+.element-preview[data-tag="h2"],
+.element-preview[data-tag="h3"] {
+  border-left: 4px solid #3b82f6;
+}
+
+.element-preview[data-tag="button"] {
+  border-left: 4px solid #10b981;
+}
+
+.element-preview[data-tag="a"] {
+  border-left: 4px solid #8b5cf6;
+}
+
+.element-preview[data-tag="p"] {
+  border-left: 4px solid #6b7280;
+}
+
+/* Container group animations */
+.container-group {
+  transition: all 0.3s ease;
+}
+
+.container-group.collapsed {
+  opacity: 0.7;
+}
+
+/* Text clamp utility for multi-line text truncation */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Loading and empty states */
+.visual-dom-loading {
+  display: flex;
+  items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #6b7280;
+}
+
+.visual-dom-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #9ca3af;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+  .visual-dom-view .element-preview {
+    padding: 12px;
+  }
+  
+  .visual-dom-view .element-preview[data-info]:hover::after {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+}
+
+/* Dark mode support (if needed) */
+@media (prefers-color-scheme: dark) {
+  .visual-dom-view .element-preview[data-info]:hover::after {
+    background: rgba(255, 255, 255, 0.9);
+    color: black;
+  }
+  
+  .visual-dom-view .element-preview[data-info]:hover::before {
+    border-top-color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+/* Bottom Sheet Animations */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes backdrop-fade-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Custom Scrollbar for Bottom Sheet */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Handle bar hover effect */
+.bottom-sheet-handle {
+  transition: all 0.2s ease;
+}
+
+.bottom-sheet-handle:hover {
+  background-color: #6b7280;
+  transform: scaleX(1.2);
+}

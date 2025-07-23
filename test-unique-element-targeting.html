@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Unique Element Targeting Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        .duplicate-elements {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .card {
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+        .card.highlighted {
+            background: #e7f3ff;
+            border-color: #007acc;
+        }
+        .button-group {
+            margin: 20px 0;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 15px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005999;
+        }
+        .test-results {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        .success {
+            color: #28a745;
+        }
+        .warning {
+            color: #ffc107;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .identical-class {
+            background: #ffe6e6;
+            border: 2px solid #ff9999;
+        }
+        .identical-class h3 {
+            color: #cc0000;
+        }
+        .product {
+            transition: all 0.3s ease;
+        }
+        .product.highlighted {
+            box-shadow: 0 2px 10px rgba(255, 193, 7, 0.3);
+        }
+        .price.badge {
+            background: #ffc107;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .price.badge.important {
+            background: #dc3545;
+            color: white;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+        .btn.primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn.secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn.primary.cta {
+            background: #28a745;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Enhanced Unique Element Targeting Test</h1>
+        <p>This test demonstrates the enhanced targeting system's ability to uniquely identify and modify specific elements even when multiple elements share the same classes, IDs, or sections.</p>
+
+        <!-- Test Section 1: Identical Classes -->
+        <div class="test-section">
+            <h2>Test 1: Elements with Identical Classes</h2>
+            <p>Multiple elements with the same class should be targetable individually using enhanced selectors:</p>
+            
+            <div class="duplicate-elements">
+                <div class="card identical-class" data-testid="card-1">
+                    <h3>Card 1</h3>
+                    <p class="description">Original description for card 1</p>
+                    <button class="action-btn">Click me</button>
+                </div>
+                <div class="card identical-class" data-testid="card-2">
+                    <h3>Card 2</h3>
+                    <p class="description">Original description for card 2</p>
+                    <button class="action-btn">Click me</button>
+                </div>
+                <div class="card identical-class" data-testid="card-3">
+                    <h3>Card 3</h3>
+                    <p class="description">Original description for card 3</p>
+                    <button class="action-btn">Click me</button>
+                </div>
+                <div class="card identical-class" data-testid="card-4">
+                    <h3>Card 4</h3>
+                    <p class="description">Original description for card 4</p>
+                    <button class="action-btn">Click me</button>
+                </div>
+            </div>
+            
+            <!-- Combo Class Elements -->
+            <h3>Combo Class Testing</h3>
+            <p>Elements with multiple CSS classes to test combo class targeting:</p>
+            <div class="duplicate-elements">
+                <div class="product card featured premium highlighted" data-product="item-1">
+                    <h4>Premium Product 1</h4>
+                    <span class="price badge important">$99.99</span>
+                    <button class="btn primary cta">Buy Now</button>
+                </div>
+                <div class="product card featured premium" data-product="item-2">
+                    <h4>Premium Product 2</h4>
+                    <span class="price badge">$79.99</span>
+                    <button class="btn secondary">Add to Cart</button>
+                </div>
+                <div class="product card featured" data-product="item-3">
+                    <h4>Featured Product 3</h4>
+                    <span class="price">$49.99</span>
+                    <button class="btn primary">Buy Now</button>
+                </div>
+                <div class="product card" data-product="item-4">
+                    <h4>Regular Product 4</h4>
+                    <span class="price">$29.99</span>
+                    <button class="btn">Add to Cart</button>
+                </div>
+            </div></div>
+
+            <div class="button-group">
+                <button onclick="testTextReplacementById()">Test: Replace text in Card 2 only</button>
+                <button onclick="testHideSpecificCard()">Test: Hide Card 3 only</button>
+                <button onclick="testPositionalTargeting()">Test: Modify Card 1 using position</button>
+                <button onclick="testComboClassTargeting()">🎯 Test: Combo Class Targeting</button>
+                <button onclick="scrapeAndShowSelectors()">🌳 Scrape & Show Enhanced Selectors</button>
+            </div>
+        </div>
+
+        <!-- Test Section 2: Nested Duplicate Elements -->
+        <div class="test-section">
+            <h2>Test 2: Nested Elements with Same Structure</h2>
+            <p>Testing targeting within nested structures with duplicate patterns:</p>
+            
+            <div class="duplicate-elements">
+                <article class="post">
+                    <header class="post-header">
+                        <h3 class="post-title">Post Title 1</h3>
+                        <div class="post-meta">Author: John Doe</div>
+                    </header>
+                    <div class="post-content">
+                        <p class="excerpt">This is the excerpt for post 1</p>
+                        <a href="#" class="read-more">Read More</a>
+                    </div>
+                </article>
+                
+                <article class="post">
+                    <header class="post-header">
+                        <h3 class="post-title">Post Title 2</h3>
+                        <div class="post-meta">Author: Jane Smith</div>
+                    </header>
+                    <div class="post-content">
+                        <p class="excerpt">This is the excerpt for post 2</p>
+                        <a href="#" class="read-more">Read More</a>
+                    </div>
+                </article>
+                
+                <article class="post">
+                    <header class="post-header">
+                        <h3 class="post-title">Post Title 3</h3>
+                        <div class="post-meta">Author: Bob Wilson</div>
+                    </header>
+                    <div class="post-content">
+                        <p class="excerpt">This is the excerpt for post 3</p>
+                        <a href="#" class="read-more">Read More</a>
+                    </div>
+                </article>
+            </div>
+
+            <div class="button-group">
+                <button onclick="testNestedTargeting()">Test: Modify only Post 2 title</button>
+                <button onclick="testContextualTargeting()">Test: Change "Read More" in Post 1 only</button>
+            </div>
+        </div>
+
+        <!-- Test Section 3: Dynamic Content -->
+        <div class="test-section">
+            <h2>Test 3: Dynamic Content Testing</h2>
+            <p>Adding identical elements dynamically to test targeting persistence:</p>
+            
+            <div id="dynamic-container">
+                <!-- Dynamic content will be added here -->
+            </div>
+
+            <div class="button-group">
+                <button onclick="addDynamicElements()">Add Dynamic Elements</button>
+                <button onclick="testDynamicTargeting()">Test: Target 3rd Dynamic Element</button>
+                <button onclick="clearDynamic()">Clear Dynamic Elements</button>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="test-results">
+            <h3>Test Results</h3>
+            <div id="results-log">
+                <p>Click test buttons to see results...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Enhanced element targeting system (simplified version for testing)
+        class EnhancedElementTargeting {
+            constructor() {
+                this.testResults = [];
+            }
+
+            log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                this.testResults.push({ timestamp, message, type });
+                this.updateResultsDisplay();
+                
+                const prefix = {
+                    'success': '✅',
+                    'warning': '⚠️',
+                    'error': '❌',
+                    'info': 'ℹ️'
+                }[type] || 'ℹ️';
+                
+                console.log(`${prefix} [${timestamp}] ${message}`);
+            }
+
+            updateResultsDisplay() {
+                const resultsEl = document.getElementById('results-log');
+                resultsEl.innerHTML = this.testResults
+                    .slice(-10) // Show last 10 results
+                    .map(result => 
+                        `<div class="${result.type}">
+                            <strong>[${result.timestamp}]</strong> ${result.message}
+                        </div>`
+                    ).join('');
+            }
+
+            // Simulate enhanced selector strategies with combo class support
+            generateSelectorStrategies(element) {
+                const strategies = [];
+                const tag = element.tagName.toLowerCase();
+                
+                // ID strategy
+                if (element.id) {
+                    strategies.push({
+                        selector: `#${element.id}`,
+                        type: 'id',
+                        reliability: 1.0,
+                        description: 'ID selector',
+                        isUnique: true
+                    });
+                }
+                
+                // Data attribute strategies
+                for (const [key, value] of Object.entries(element.dataset)) {
+                    if (value) {
+                        strategies.push({
+                            selector: `[data-${key}="${value}"]`,
+                            type: 'attribute',
+                            reliability: 0.9,
+                            description: `Data-${key} attribute`,
+                            isUnique: true
+                        });
+                    }
+                }
+                
+                // Enhanced class strategies with combo class support
+                if (element.className) {
+                    const classes = element.className.split(' ').filter(c => c.trim());
+                    if (classes.length > 0) {
+                        // Single class selectors
+                        classes.forEach((cls, index) => {
+                            const classSelector = `${tag}.${cls}`;
+                            const matches = document.querySelectorAll(classSelector);
+                            
+                            strategies.push({
+                                selector: classSelector,
+                                type: 'class',
+                                reliability: matches.length === 1 ? 0.9 : Math.max(0.3, 1 / matches.length),
+                                description: `Single class (.${cls}) - ${matches.length} matches`,
+                                isUnique: matches.length === 1
+                            });
+                        });
+                        
+                        // Combo class selectors (2 classes)
+                        if (classes.length > 1) {
+                            for (let i = 0; i < classes.length - 1; i++) {
+                                for (let j = i + 1; j < classes.length; j++) {
+                                    const comboSelector = `${tag}.${classes[i]}.${classes[j]}`;
+                                    const matches = document.querySelectorAll(comboSelector);
+                                    
+                                    strategies.push({
+                                        selector: comboSelector,
+                                        type: 'class',
+                                        reliability: matches.length === 1 ? 0.95 : Math.max(0.4, 1 / matches.length),
+                                        description: `Combo class (.${classes[i]}.${classes[j]}) - ${matches.length} matches`,
+                                        isUnique: matches.length === 1
+                                    });
+                                }
+                            }
+                            
+                            // All classes combined
+                            const allClassesSelector = `${tag}.${classes.join('.')}`;
+                            const allMatches = document.querySelectorAll(allClassesSelector);
+                            
+                            strategies.push({
+                                selector: allClassesSelector,
+                                type: 'class',
+                                reliability: allMatches.length === 1 ? 0.98 : Math.max(0.5, 1 / allMatches.length),
+                                description: `All classes (.${classes.join('.')}) - ${allMatches.length} matches`,
+                                isUnique: allMatches.length === 1
+                            });
+                        }
+                        
+                        // Position-based fallbacks
+                        const primaryClassSelector = `${tag}.${classes[0]}`;
+                        const matches = document.querySelectorAll(primaryClassSelector);
+                        if (matches.length > 1) {
+                            const index = Array.from(matches).indexOf(element) + 1;
+                            
+                            strategies.push({
+                                selector: `${primaryClassSelector}:nth-child(${index})`,
+                                type: 'nth-child',
+                                reliability: 0.8,
+                                description: `Class + position (.${classes[0]}:nth-child(${index}))`,
+                                isUnique: true
+                            });
+                        }
+                    }
+                }
+                
+                // Full path strategy
+                const path = this.generateFullPath(element);
+                strategies.push({
+                    selector: path,
+                    type: 'unique-path',
+                    reliability: 0.7,
+                    description: 'Full path selector',
+                    isUnique: true
+                });
+                
+                return strategies.sort((a, b) => {
+                    // Prioritize unique selectors, then by reliability
+                    if (a.isUnique && !b.isUnique) return -1;
+                    if (!a.isUnique && b.isUnique) return 1;
+                    return b.reliability - a.reliability;
+                });
+            }
+
+            generateFullPath(element) {
+                const path = [];
+                let current = element;
+                
+                while (current && current !== document.body) {
+                    const tag = current.tagName.toLowerCase();
+                    const parent = current.parentElement;
+                    
+                    if (parent) {
+                        const siblings = Array.from(parent.children).filter(child => 
+                            child.tagName.toLowerCase() === tag
+                        );
+                        const index = siblings.indexOf(current) + 1;
+                        path.unshift(`${tag}:nth-of-type(${index})`);
+                    } else {
+                        path.unshift(tag);
+                    }
+                    
+                    current = parent;
+                }
+                
+                return path.join(' > ');
+            }
+
+            // Target element using enhanced strategies
+            targetElement(strategies, context = {}) {
+                this.log(`🎯 Attempting to target element using ${strategies.length} strategies`);
+                
+                for (const strategy of strategies) {
+                    const elements = document.querySelectorAll(strategy.selector);
+                    this.log(`Strategy ${strategy.type}: "${strategy.selector}" found ${elements.length} elements`);
+                    
+                    if (elements.length === 1) {
+                        this.log(`✅ Unique element found with ${strategy.type} selector`, 'success');
+                        return { success: true, element: elements[0], strategy };
+                    }
+                    
+                    if (elements.length > 1) {
+                        // Apply disambiguation
+                        const disambiguated = this.disambiguateElements(Array.from(elements), context);
+                        if (disambiguated.success) {
+                            this.log(`✅ Element disambiguated using ${disambiguated.method}`, 'success');
+                            return { success: true, element: disambiguated.element, strategy };
+                        }
+                    }
+                }
+                
+                this.log(`❌ No targeting strategy succeeded`, 'error');
+                return { success: false, element: null, strategy: null };
+            }
+
+            disambiguateElements(elements, context) {
+                // Text content matching
+                if (context.originalText) {
+                    for (const element of elements) {
+                        if (element.textContent && element.textContent.includes(context.originalText)) {
+                            return { success: true, element, method: 'text content matching' };
+                        }
+                    }
+                }
+                
+                // Position-based
+                if (context.position !== undefined && context.position < elements.length) {
+                    return { success: true, element: elements[context.position], method: 'position-based' };
+                }
+                
+                // First element fallback
+                return { success: true, element: elements[0], method: 'first element fallback' };
+            }
+        }
+
+        // Initialize targeting system
+        const targeting = new EnhancedElementTargeting();
+
+        // Test functions
+        function testTextReplacementById() {
+            targeting.log('🧪 Testing text replacement targeting by data-testid');
+            
+            const targetElement = document.querySelector('[data-testid="card-2"] .description');
+            if (targetElement) {
+                const strategies = targeting.generateSelectorStrategies(targetElement);
+                const result = targeting.targetElement(strategies, {
+                    originalText: 'Original description for card 2'
+                });
+                
+                if (result.success) {
+                    result.element.textContent = 'MODIFIED: This description was changed using enhanced targeting!';
+                    targeting.log('Text replacement successful - only Card 2 was modified', 'success');
+                } else {
+                    targeting.log('Text replacement failed', 'error');
+                }
+            }
+        }
+
+        function testHideSpecificCard() {
+            targeting.log('🧪 Testing hide element targeting by position');
+            
+            const cards = document.querySelectorAll('.identical-class');
+            const targetCard = cards[2]; // Card 3 (0-indexed)
+            
+            if (targetCard) {
+                const strategies = targeting.generateSelectorStrategies(targetCard);
+                const result = targeting.targetElement(strategies, { position: 2 });
+                
+                if (result.success) {
+                    result.element.style.display = 'none';
+                    targeting.log('Hide element successful - only Card 3 was hidden', 'success');
+                } else {
+                    targeting.log('Hide element failed', 'error');
+                }
+            }
+        }
+
+        function testPositionalTargeting() {
+            targeting.log('🧪 Testing positional targeting');
+            
+            const cards = document.querySelectorAll('.identical-class');
+            const targetCard = cards[0]; // Card 1
+            
+            if (targetCard) {
+                const strategies = targeting.generateSelectorStrategies(targetCard);
+                const result = targeting.targetElement(strategies, { position: 0 });
+                
+                if (result.success) {
+                    result.element.style.border = '3px solid #28a745';
+                    result.element.style.background = '#d4edda';
+                    targeting.log('Positional targeting successful - Card 1 style modified', 'success');
+                } else {
+                    targeting.log('Positional targeting failed', 'error');
+                }
+            }
+        }
+
+        function testNestedTargeting() {
+            targeting.log('🧪 Testing nested element targeting');
+            
+            const posts = document.querySelectorAll('.post');
+            const targetTitle = posts[1].querySelector('.post-title'); // Post 2 title
+            
+            if (targetTitle) {
+                const strategies = targeting.generateSelectorStrategies(targetTitle);
+                const result = targeting.targetElement(strategies, {
+                    originalText: 'Post Title 2'
+                });
+                
+                if (result.success) {
+                    result.element.textContent = 'UPDATED: Post Title 2 (Modified by Enhanced Targeting)';
+                    result.element.style.color = '#007acc';
+                    targeting.log('Nested targeting successful - only Post 2 title was modified', 'success');
+                } else {
+                    targeting.log('Nested targeting failed', 'error');
+                }
+            }
+        }
+
+        function testContextualTargeting() {
+            targeting.log('🧪 Testing contextual targeting within specific container');
+            
+            const posts = document.querySelectorAll('.post');
+            const targetLink = posts[0].querySelector('.read-more'); // First post's "Read More"
+            
+            if (targetLink) {
+                const strategies = targeting.generateSelectorStrategies(targetLink);
+                const result = targeting.targetElement(strategies);
+                
+                if (result.success) {
+                    result.element.textContent = 'Continue Reading →';
+                    result.element.style.background = '#28a745';
+                    result.element.style.color = 'white';
+                    result.element.style.padding = '5px 10px';
+                    result.element.style.borderRadius = '3px';
+                    result.element.style.textDecoration = 'none';
+                    targeting.log('Contextual targeting successful - only first post link was modified', 'success');
+                } else {
+                    targeting.log('Contextual targeting failed', 'error');
+                }
+            }
+        }
+
+        function testComboClassTargeting() {
+            targeting.log('🎯 Testing combo class targeting on complex elements');
+            
+            // Test 1: Target the premium highlighted product (most specific combo)
+            const premiumHighlighted = document.querySelector('.product.premium.highlighted');
+            if (premiumHighlighted) {
+                const strategies = targeting.generateSelectorStrategies(premiumHighlighted);
+                targeting.log(`Found ${strategies.length} targeting strategies for premium highlighted product:`);
+                
+                strategies.slice(0, 5).forEach((strategy, index) => {
+                    const uniqueIndicator = strategy.isUnique ? '🎯 UNIQUE' : '⚠️ Multiple';
+                    targeting.log(`  ${index + 1}. ${strategy.description} ${uniqueIndicator}`, 
+                                strategy.isUnique ? 'success' : 'warning');
+                });
+                
+                const result = targeting.targetElement(strategies);
+                if (result.success) {
+                    result.element.style.border = '3px solid #ff6b35';
+                    result.element.style.background = '#fff3e0';
+                    result.element.querySelector('h4').style.color = '#ff6b35';
+                    targeting.log('✅ Combo class targeting successful - premium highlighted product modified', 'success');
+                } else {
+                    targeting.log('❌ Combo class targeting failed', 'error');
+                }
+            }
+            
+            // Test 2: Target the important price badge (combo class)
+            const importantBadge = document.querySelector('.price.badge.important');
+            if (importantBadge) {
+                const strategies = targeting.generateSelectorStrategies(importantBadge);
+                const result = targeting.targetElement(strategies);
+                
+                if (result.success) {
+                    result.element.style.background = '#dc3545';
+                    result.element.style.color = 'white';
+                    result.element.style.padding = '5px 10px';
+                    result.element.style.borderRadius = '15px';
+                    result.element.style.fontWeight = 'bold';
+                    result.element.style.animation = 'pulse 1s infinite';
+                    targeting.log('✅ Important badge targeted successfully using combo classes', 'success');
+                } else {
+                    targeting.log('❌ Important badge targeting failed', 'error');
+                }
+            }
+            
+            // Test 3: Target primary CTA button (triple combo class)
+            const primaryCTA = document.querySelector('.btn.primary.cta');
+            if (primaryCTA) {
+                const strategies = targeting.generateSelectorStrategies(primaryCTA);
+                targeting.log(`CTA button has ${strategies.filter(s => s.isUnique).length} unique targeting strategies`);
+                
+                const result = targeting.targetElement(strategies);
+                if (result.success) {
+                    result.element.textContent = '🚀 LIMITED OFFER!';
+                    result.element.style.background = 'linear-gradient(45deg, #ff6b35, #f7931e)';
+                    result.element.style.boxShadow = '0 4px 15px rgba(255, 107, 53, 0.4)';
+                    result.element.style.transform = 'scale(1.05)';
+                    targeting.log('✅ Primary CTA button enhanced using triple combo class selector', 'success');
+                } else {
+                    targeting.log('❌ Primary CTA targeting failed', 'error');
+                }
+            }
+            
+            targeting.log('🎯 Combo class targeting test completed - demonstrates precise targeting of complex elements', 'success');
+        }
+
+        function addDynamicElements() {
+            const container = document.getElementById('dynamic-container');
+            container.innerHTML = '';
+            
+            for (let i = 1; i <= 5; i++) {
+                const element = document.createElement('div');
+                element.className = 'card dynamic-item';
+                element.innerHTML = `
+                    <h4>Dynamic Item ${i}</h4>
+                    <p class="dynamic-text">Dynamic content ${i}</p>
+                    <button class="dynamic-btn">Action ${i}</button>
+                `;
+                container.appendChild(element);
+            }
+            
+            targeting.log('Added 5 dynamic elements with identical structure', 'info');
+        }
+
+        function testDynamicTargeting() {
+            targeting.log('🧪 Testing targeting on dynamically added elements');
+            
+            const dynamicItems = document.querySelectorAll('.dynamic-item');
+            if (dynamicItems.length < 3) {
+                targeting.log('Please add dynamic elements first', 'warning');
+                return;
+            }
+            
+            const targetItem = dynamicItems[2]; // 3rd item (0-indexed)
+            const targetText = targetItem.querySelector('.dynamic-text');
+            
+            if (targetText) {
+                const strategies = targeting.generateSelectorStrategies(targetText);
+                const result = targeting.targetElement(strategies, { position: 2 });
+                
+                if (result.success) {
+                    result.element.textContent = 'TARGETED: This dynamic element was specifically targeted!';
+                    result.element.style.fontWeight = 'bold';
+                    result.element.style.color = '#dc3545';
+                    targeting.log('Dynamic targeting successful - only 3rd dynamic item was modified', 'success');
+                } else {
+                    targeting.log('Dynamic targeting failed', 'error');
+                }
+            }
+        }
+
+        function clearDynamic() {
+            document.getElementById('dynamic-container').innerHTML = '';
+            targeting.log('Dynamic elements cleared', 'info');
+        }
+
+        async function scrapeAndShowSelectors() {
+            targeting.log('🌳 Starting hierarchical scraping to demonstrate enhanced selectors');
+            
+            try {
+                // In a real implementation, this would call the hierarchical scraping API
+                // For demo purposes, we'll simulate the enhanced selector generation
+                
+                const cards = document.querySelectorAll('.identical-class');
+                targeting.log(`Found ${cards.length} identical elements to analyze`);
+                
+                cards.forEach((card, index) => {
+                    const strategies = targeting.generateSelectorStrategies(card);
+                    targeting.log(`\nCard ${index + 1} targeting strategies:`);
+                    
+                    strategies.forEach((strategy, strategyIndex) => {
+                        const uniqueIndicator = strategy.isUnique ? '🎯 UNIQUE' : '⚠️ Multiple';
+                        targeting.log(`  ${strategyIndex + 1}. ${strategy.type}: ${strategy.selector} ${uniqueIndicator}`, 
+                                    strategy.isUnique ? 'success' : 'warning');
+                    });
+                });
+                
+                targeting.log('Enhanced selector analysis complete - each element has multiple targeting options', 'success');
+                
+            } catch (error) {
+                targeting.log(`Scraping failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Initial setup
+        targeting.log('Enhanced Element Targeting Test initialized', 'success');
+        targeting.log('🎯 This test demonstrates targeting specific elements among duplicates');
+    </script>
+</body>
+</html> 

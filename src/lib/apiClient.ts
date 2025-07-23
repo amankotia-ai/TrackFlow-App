@@ -1361,6 +1361,35 @@ class ApiClient {
       };
     }
   }
+
+  /**
+   * Scrape website with hierarchical DOM structure
+   */
+  async scrapeWebsiteHierarchical(url: string): Promise<ApiResponse> {
+    try {
+      const apiUrl = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001/api/hierarchical-scrape'
+        : 'https://trackflow-app-production.up.railway.app/api/hierarchical-scrape';
+      
+      const data = await this.requestWithRetry(apiUrl, {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      }, 30000); // Longer timeout for hierarchical scraping
+      
+      return {
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      };
+      
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to scrape website hierarchically',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
 }
 
 // Export singleton instance

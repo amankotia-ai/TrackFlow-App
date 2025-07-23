@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hierarchical DOM Scraper Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+        }
+        nav {
+            background: #333;
+            padding: 1rem;
+        }
+        nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            gap: 2rem;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        nav a:hover {
+            color: #667eea;
+        }
+        main {
+            padding: 2rem;
+        }
+        .hero {
+            text-align: center;
+            padding: 3rem 0;
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            margin-bottom: 2rem;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        .feature-card {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        .cta-section {
+            background: #e9ecef;
+            padding: 2rem;
+            text-align: center;
+            margin: 2rem 0;
+        }
+        .form-section {
+            background: white;
+            padding: 2rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        footer {
+            background: #343a40;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+        }
+        .footer-links a {
+            color: #adb5bd;
+            text-decoration: none;
+        }
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .social-link {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background: #495057;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 40px;
+            color: white;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header id="main-header">
+            <h1>TrackFlow Demo Site</h1>
+            <p>Testing hierarchical DOM structure scraping with complex nested elements</p>
+        </header>
+
+        <!-- Navigation Section -->
+        <nav id="main-navigation" role="navigation">
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li><a href="#about">About</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main id="main-content">
+            <!-- Hero Section -->
+            <section class="hero" id="hero-section">
+                <div class="hero-content">
+                    <h2>Welcome to Our Amazing Platform</h2>
+                    <p>Discover the power of hierarchical web scraping with our advanced DOM analysis tools</p>
+                    <button class="cta-button">Get Started Today</button>
+                </div>
+            </section>
+
+            <!-- Features Section -->
+            <section id="features-section">
+                <h2>Key Features</h2>
+                <div class="features">
+                    <article class="feature-card">
+                        <h3>Smart Element Detection</h3>
+                        <p>Our advanced algorithms can identify and categorize web elements with high accuracy.</p>
+                        <ul>
+                            <li>Automatic element classification</li>
+                            <li>Semantic understanding</li>
+                            <li>Context-aware selection</li>
+                        </ul>
+                    </article>
+                    
+                    <article class="feature-card">
+                        <h3>Hierarchical Analysis</h3>
+                        <p>Understand the complete DOM structure with parent-child relationships intact.</p>
+                        <div class="feature-details">
+                            <span class="badge">New</span>
+                            <span class="badge">Premium</span>
+                        </div>
+                    </article>
+                    
+                    <article class="feature-card">
+                        <h3>Visual Element Preview</h3>
+                        <p>See exactly how elements are organized and nested in the webpage structure.</p>
+                        <button class="learn-more">Learn More</button>
+                    </article>
+                </div>
+            </section>
+
+            <!-- CTA Section -->
+            <section class="cta-section" id="cta">
+                <h2>Ready to Get Started?</h2>
+                <p>Join thousands of developers who trust our platform for their web scraping needs.</p>
+                <div class="cta-buttons">
+                    <button class="primary-cta">Start Free Trial</button>
+                    <button class="secondary-cta">Watch Demo</button>
+                </div>
+            </section>
+
+            <!-- Form Section -->
+            <section class="form-section" id="contact-form">
+                <h2>Contact Us</h2>
+                <form action="#" method="post">
+                    <div class="form-group">
+                        <label for="name">Full Name</label>
+                        <input type="text" id="name" name="name" placeholder="Enter your full name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="company">Company</label>
+                        <input type="text" id="company" name="company" placeholder="Your company name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="interest">Area of Interest</label>
+                        <select id="interest" name="interest">
+                            <option value="">Select an option</option>
+                            <option value="web-scraping">Web Scraping</option>
+                            <option value="dom-analysis">DOM Analysis</option>
+                            <option value="automation">Automation</option>
+                            <option value="integration">API Integration</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="message">Message</label>
+                        <textarea id="message" name="message" rows="4" placeholder="Tell us about your project..."></textarea>
+                    </div>
+                    
+                    <button type="submit">Send Message</button>
+                </form>
+            </section>
+        </main>
+
+        <!-- Footer Section -->
+        <footer id="main-footer">
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="#privacy">Privacy Policy</a>
+                    <a href="#terms">Terms of Service</a>
+                    <a href="#support">Support</a>
+                    <a href="#docs">Documentation</a>
+                </div>
+                
+                <p>&copy; 2024 TrackFlow. All rights reserved.</p>
+                
+                <div class="social-links">
+                    <a href="#" class="social-link" aria-label="Twitter">T</a>
+                    <a href="#" class="social-link" aria-label="LinkedIn">L</a>
+                    <a href="#" class="social-link" aria-label="GitHub">G</a>
+                    <a href="#" class="social-link" aria-label="Discord">D</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Add some interactive behavior to test element detection
+        document.addEventListener('DOMContentLoaded', function() {
+            // CTA button interactions
+            const ctaButtons = document.querySelectorAll('.cta-button, .primary-cta, .secondary-cta');
+            ctaButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    alert('Button clicked: ' + this.textContent);
+                });
+            });
+
+            // Form submission
+            const contactForm = document.querySelector('#contact-form form');
+            if (contactForm) {
+                contactForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    alert('Form submitted successfully!');
+                });
+            }
+
+            // Learn more buttons
+            const learnMoreButtons = document.querySelectorAll('.learn-more');
+            learnMoreButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const featureCard = this.closest('.feature-card');
+                    const title = featureCard.querySelector('h3').textContent;
+                    alert('Learn more about: ' + title);
+                });
+            });
+
+            // Navigation links
+            const navLinks = document.querySelectorAll('nav a');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const section = this.getAttribute('href').substring(1);
+                    console.log('Navigating to:', section);
+                });
+            });
+        });
+    </script>
+</body>
+</html> 

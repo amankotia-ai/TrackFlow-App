@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import hierarchicalScrapeHandler from './api/hierarchical-scrape.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -719,6 +720,11 @@ app.post('/api/scrape', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
+});
+
+// Hierarchical scraping endpoint
+app.all('/api/hierarchical-scrape', (req, res) => {
+  hierarchicalScrapeHandler(req, res);
 });
 
 // SPA fallback - serve React app for all non-API routes
