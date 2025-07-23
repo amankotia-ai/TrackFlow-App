@@ -77,6 +77,12 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
     };
   }, []);
 
+  // Helper function to get workflow name by ID
+  const getWorkflowName = (workflowId: string): string => {
+    const workflow = workflows.find(w => w.id === workflowId);
+    return workflow ? workflow.name : `Playbook ${workflowId.slice(-8)}`;
+  };
+
   const formatNumber = (num: number): string => {
     if (num >= 1000000) {
       return `${(num / 1000000).toFixed(1)}M`;
@@ -299,7 +305,7 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
             {/* Table Header */}
             <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-secondary-50 text-sm font-medium text-secondary-700 tracking-tight border-b border-secondary-200">
               <div className="col-span-1 flex items-center">Status</div>
-              <div className="col-span-4 flex items-center">Workflow</div>
+              <div className="col-span-4 flex items-center">Playbook</div>
               <div className="col-span-3 flex items-center">Execution Time</div>
               <div className="col-span-2 flex items-center">Duration</div>
               <div className="col-span-2 flex items-center">Actions</div>
@@ -315,7 +321,7 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
                     }`} />
                   </div>
                   <div className="col-span-4">
-                    <h3 className="font-medium text-secondary-900">Workflow {execution.workflow_id.slice(-8)}</h3>
+                    <h3 className="font-medium text-secondary-900">{getWorkflowName(execution.workflow_id)}</h3>
                     <p className="text-sm text-secondary-600">{execution.page_url || 'Unknown page'}</p>
                   </div>
                   <div className="col-span-3 flex items-center">
