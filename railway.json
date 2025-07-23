@@ -2,8 +2,8 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "nixpacks",
-    "buildCommand": "echo '=== RAILWAY BUILD START ===' && npm install && echo '=== BUILDING FRONTEND ===' && npm run build && echo '=== FRONTEND BUILT ===' && ls -la dist/ && echo '=== COPYING TO ROOT ===' && cp dist/index.html index.html && cp -r dist/assets . && echo '=== ROOT FILES COPIED ===' && ls -la index.html assets/ && echo '=== SWITCHING TO PRODUCTION DEPS ===' && cp package-railway.json package.json && npm install --only=production && echo '=== BUILD COMPLETE - ROOT CHECK ===' && ls -la index.html && echo 'Frontend files ready in root directory'",
-    "watchPatterns": ["**/*.js", "**/*.ts", "**/*.tsx", "railway-server.js", "package.json", "src/**/*", "index.html", "assets/**/*"]
+    "buildCommand": "echo '=== RAILWAY BUILD START ===' && echo '=== SWITCHING TO PRODUCTION DEPS ===' && cp package-railway.json package.json && npm install --only=production && echo '=== BUILD COMPLETE ===' && ls -la dist/ && echo 'Using pre-built frontend from git'",
+    "watchPatterns": ["**/*.js", "**/*.ts", "**/*.tsx", "railway-server.js", "package.json", "src/**/*", "dist/**/*"]
   },
   "deploy": {
     "startCommand": "node railway-server.js",

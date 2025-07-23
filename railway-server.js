@@ -38,12 +38,10 @@ console.log('🔑 Supabase Service Role Key:', process.env.SUPABASE_SERVICE_ROLE
 
 // Check if frontend was built
 const distExists = fs.existsSync(path.join(__dirname, 'dist'));
-const indexExists = fs.existsSync(path.join(__dirname, 'index.html'));
-const assetsExists = fs.existsSync(path.join(__dirname, 'assets'));
+const indexExists = fs.existsSync(path.join(__dirname, 'dist', 'index.html'));
 console.log('🏗️ Frontend Build Status:');
 console.log('   📁 dist/ directory:', distExists ? 'Exists ✅' : 'Missing ❌');
-console.log('   📄 index.html (root):', indexExists ? 'Exists ✅' : 'Missing ❌');
-console.log('   📁 assets/ directory:', assetsExists ? 'Exists ✅' : 'Missing ❌');
+console.log('   📄 dist/index.html:', indexExists ? 'Exists ✅' : 'Missing ❌');
 
 // CORS for all origins
 app.use(cors({
@@ -63,8 +61,8 @@ app.options('*', (req, res) => {
   res.status(200).end();
 });
 
-// Serve static files from the root directory (includes assets, logos, etc.)
-app.use(express.static(__dirname));
+// Serve static files from the dist directory
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Serve test HTML files from root directory
 app.use(express.static(__dirname, { 
@@ -730,10 +728,10 @@ app.get('*', (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
   
-  // Check if frontend files exist in root
-  const indexPath = path.join(__dirname, 'index.html');
-  if (!fs.existsSync(indexPath)) {
-    console.error('❌ Frontend not built: index.html not found in root');
+  // Check if dist directory exists
+  const distPath = path.join(__dirname, 'dist', 'index.html');
+  if (!fs.existsSync(distPath)) {
+    console.error('❌ Frontend not built: dist/index.html not found');
     console.log('📁 Available files in current directory:', fs.readdirSync(__dirname));
     
     // Serve a basic API-focused landing page instead of 503
@@ -787,7 +785,7 @@ app.get('*', (req, res) => {
   }
   
   // Serve the React app
-  res.sendFile(indexPath);
+  res.sendFile(distPath);
 });
 
 app.listen(PORT, () => {
