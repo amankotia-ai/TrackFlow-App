@@ -12,9 +12,8 @@ yarn-error.log*
 .env.production.local
 
 # Build outputs
-build/
 *.tsbuildinfo
-# Note: dist/ is now built fresh on Railway, but keeping local dist/ for development
+# Note: build/ is now committed to git for Railway deployment
 
 # IDE files
 .vscode/
