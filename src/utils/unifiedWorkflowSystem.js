@@ -383,6 +383,7 @@
         timeOnPage: 0,
         scrollPercentage: 0,
         utm: this.pageContext.utm,
+        geolocation: this.geolocationData, // Include geolocation data for geo triggers
         ...this.userContext
       };
       
@@ -420,11 +421,12 @@
         this.log(`🎯 Found ${triggerNodes.length} trigger nodes in workflow: ${workflow.name}`);
         
         triggerNodes.forEach(trigger => {
-          // Check immediate triggers (device type, UTM, page load)
+          // Check immediate triggers (device type, UTM, page load, geolocation)
           const immediateEventData = {
             eventType: 'page_load',
             deviceType: this.pageContext.deviceType,
-            utm: this.pageContext.utm
+            utm: this.pageContext.utm,
+            geolocation: this.geolocationData
           };
           
           this.log(`🔍 Evaluating trigger "${trigger.name}" with data:`, 'info', {
@@ -662,10 +664,11 @@
       // Create a cache key for this trigger and event data
       const triggerCacheKey = `${trigger.id}-${triggerType}-${eventData.eventType}`;
       
-      // For immediate triggers (page_load, device type, UTM), allow re-execution more frequently
+      // For immediate triggers (page_load, device type, UTM, geolocation), allow re-execution more frequently
       const isImmediateTrigger = eventData.eventType === 'page_load' || 
                                 triggerType === 'Device Type' || 
-                                triggerType === 'UTM Parameters';
+                                triggerType === 'UTM Parameters' || 
+                                triggerType === 'Geolocation';
       
       // Check if this trigger has already been processed for similar conditions
       if (this.triggeredWorkflows.has(triggerCacheKey) && !isImmediateTrigger) {
