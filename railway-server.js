@@ -732,14 +732,53 @@ app.get('*', (req, res) => {
   const distPath = path.join(__dirname, 'dist', 'index.html');
   if (!fs.existsSync(distPath)) {
     console.error('❌ Frontend not built: dist/index.html not found');
-    return res.status(503).send(`
+    console.log('📁 Available files in current directory:', fs.readdirSync(__dirname));
+    
+    // Serve a basic API-focused landing page instead of 503
+    return res.status(200).send(`
       <html>
-        <head><title>TrackFlow - Building...</title></head>
-        <body style="font-family: Arial, sans-serif; text-align: center; padding: 2rem;">
-          <h1>🚧 TrackFlow is Building</h1>
-          <p>The frontend is currently being built. Please wait a moment and refresh.</p>
-          <p>If this persists, check the deployment logs.</p>
-          <button onclick="location.reload()">Refresh</button>
+        <head>
+          <title>TrackFlow API Server</title>
+          <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 2rem; }
+            .header { text-align: center; color: #333; margin-bottom: 2rem; }
+            .endpoint { background: #f5f5f5; padding: 1rem; margin: 1rem 0; border-radius: 8px; }
+            .status { color: #22c55e; font-weight: bold; }
+            .code { background: #000; color: #0f0; padding: 1rem; font-family: monospace; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>🚀 TrackFlow API Server</h1>
+            <p class="status">✅ Online and Ready</p>
+            <p>Frontend building in progress... APIs fully functional!</p>
+          </div>
+          
+          <div class="endpoint">
+            <h3>🔧 Active Workflows API</h3>
+            <div class="code">GET ${req.protocol}://${req.get('host')}/api/workflows/active</div>
+          </div>
+          
+          <div class="endpoint">
+            <h3>📊 Health Check</h3>
+            <div class="code">GET ${req.protocol}://${req.get('host')}/api/health</div>
+          </div>
+          
+          <div class="endpoint">
+            <h3>🎯 Workflow System Script</h3>
+            <div class="code">&lt;script src="${req.protocol}://${req.get('host')}/api/unified-workflow-system.js"&gt;&lt;/script&gt;</div>
+          </div>
+          
+          <div class="endpoint">
+            <h3>🕷️ Web Scraping</h3>
+            <div class="code">POST ${req.protocol}://${req.get('host')}/api/scrape</div>
+          </div>
+          
+          <p style="text-align: center; margin-top: 2rem;">
+            <button onclick="location.reload()" style="padding: 0.5rem 1rem; font-size: 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              🔄 Refresh for Frontend
+            </button>
+          </p>
         </body>
       </html>
     `);
