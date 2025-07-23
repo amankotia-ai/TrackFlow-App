@@ -439,6 +439,21 @@ app.post('/api/scrape', async (req, res) => {
   }
 });
 
+// Hierarchical scraping endpoint
+app.all('/api/hierarchical-scrape', async (req, res) => {
+  try {
+    const { default: hierarchicalScrapeHandler } = await import('./api/hierarchical-scrape.js');
+    hierarchicalScrapeHandler(req, res);
+  } catch (error) {
+    console.error('Failed to load hierarchical scrape handler:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Hierarchical scraping service unavailable',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Enhanced Analytics tracking endpoint with comprehensive tracking
 app.post('/api/analytics/track', async (req, res) => {
   try {
