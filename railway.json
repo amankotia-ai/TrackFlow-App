@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "nixpacks",
-    "buildCommand": "cp package-railway.json package.json && npm install --only=production",
+    "buildCommand": "echo '=== DEBUGGING RAILWAY BUILD ===' && ls -la && echo '=== CHECKING DIST FOLDER ===' && ls -la dist/ && echo '=== COPYING PACKAGE.JSON ===' && cp package-railway.json package.json && echo '=== INSTALLING DEPS ===' && npm install --only=production && echo '=== FINAL CHECK ===' && ls -la dist/ && echo '=== BUILD COMPLETE ==='",
     "watchPatterns": ["**/*.js", "railway-server.js", "package-railway.json", "src/**/*", "dist/**/*"]
   },
   "deploy": {
