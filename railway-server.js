@@ -63,12 +63,12 @@ app.use(express.static(__dirname, {
   index: false 
 }));
 
-// Root endpoint with documentation
-app.get('/', (req, res) => {
+// API Documentation endpoint
+app.get('/api/docs', (req, res) => {
   res.send(`
     <html>
       <head>
-        <title>TrackFlow Web Scraping & Workflow Platform</title>
+        <title>TrackFlow API Documentation</title>
         <style>
           body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 2rem; }
           .header { text-align: center; color: #333; }
@@ -78,7 +78,7 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="header">
-          <h1>🕷️ TrackFlow Platform</h1>
+          <h1>🕷️ TrackFlow API Documentation</h1>
           <p>✅ Online and Ready | Railway Deployment</p>
           <p>Web Scraping + Element Tracking + Workflow Automation</p>
         </div>
@@ -712,6 +712,17 @@ app.post('/api/scrape', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
+});
+
+// SPA fallback - serve React app for all non-API routes
+app.get('*', (req, res) => {
+  // Don't serve React app for API routes
+  if (req.path.startsWith('/api/') || req.path.startsWith('/tracking-') || req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.html')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  
+  // Serve the React app
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(PORT, () => {
