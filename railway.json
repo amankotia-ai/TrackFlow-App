@@ -2,8 +2,8 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "nixpacks",
-    "buildCommand": "echo '=== DEBUGGING RAILWAY BUILD ===' && ls -la && echo '=== CHECKING DIST FOLDER ===' && ls -la dist/ && echo '=== COPYING PACKAGE.JSON ===' && cp package-railway.json package.json && echo '=== INSTALLING DEPS ===' && npm install --only=production && echo '=== FINAL CHECK ===' && ls -la dist/ && echo '=== BUILD COMPLETE ==='",
-    "watchPatterns": ["**/*.js", "railway-server.js", "package-railway.json", "src/**/*", "dist/**/*"]
+    "buildCommand": "echo '=== RAILWAY BUILD START ===' && npm install && echo '=== BUILDING FRONTEND ===' && npm run build && echo '=== FRONTEND BUILT ===' && ls -la dist/ && echo '=== SWITCHING TO PRODUCTION DEPS ===' && cp package-railway.json package.json && npm install --only=production && echo '=== BUILD COMPLETE - DIST CHECK ===' && ls -la dist/ && echo 'dist/index.html exists:' && ls -la dist/index.html",
+    "watchPatterns": ["**/*.js", "**/*.ts", "**/*.tsx", "railway-server.js", "package.json", "src/**/*"]
   },
   "deploy": {
     "startCommand": "node railway-server.js",
