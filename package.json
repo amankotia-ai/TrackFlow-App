@@ -10,7 +10,7 @@
     "dev": "vite",
     "dev:server": "node server-backup.js",
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
-    "build": "echo 'Skipping build - using pre-built files from git'",
+    "build": "tsc && vite build",
     "start": "node railway-server.js",
     "postinstall": "echo 'Dependencies installed successfully'",
     "lint": "eslint .",
