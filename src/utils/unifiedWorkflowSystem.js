@@ -558,9 +558,15 @@
           
           // CRITICAL: Mark elements as user-closed when close buttons are clicked
           setTimeout(() => {
+            this.log(`🧹 Cleanup check: Looking for closed elements...`, 'info');
+            this.log(`   - Currently shown: [${Array.from(this.shownElements).join(', ')}]`, 'info');
+            
             // Check all shown elements and mark closed ones as user-closed
             for (const selector of this.shownElements) {
-              if (!this.isElementVisible(selector)) {
+              const isVisible = this.isElementVisible(selector);
+              this.log(`   - Checking ${selector}: visible = ${isVisible}`, 'info');
+              
+              if (!isVisible) {
                 this.shownElements.delete(selector);
                 this.userClosedElements.add(selector); // PERMANENTLY BLOCK
                 this.log(`🔒 Element closed by user - PERMANENTLY BLOCKED: ${selector}`, 'info');
@@ -1144,6 +1150,10 @@
       
       // SIMPLE: For Show Element, check if user has closed it or already shown
       if (name === 'Show Element' && config.selector) {
+        this.log(`🔍 Checking Show Element for: ${config.selector}`, 'info');
+        this.log(`   - User closed elements: [${Array.from(this.userClosedElements).join(', ')}]`, 'info');
+        this.log(`   - Shown elements: [${Array.from(this.shownElements).join(', ')}]`, 'info');
+        
         if (this.userClosedElements.has(config.selector)) {
           this.log(`🚫 Element was closed by user - BLOCKED: ${config.selector}`, 'warning');
           return { success: false, reason: 'user_closed' };
@@ -1806,7 +1816,13 @@
 
     generateSelector(element) {
       if (element.id) return `#${element.id}`;
-      if (element.className) return `.${element.className.split(' ').join('.')}`;
+      if (element.className && typeof element.className === 'string') {
+        return `.${element.className.split(' ').join('.')}`;
+      }
+      if (element.className && element.className.baseVal) {
+        // SVG elements have className.baseVal
+        return `.${element.className.baseVal.split(' ').join('.')}`;
+      }
       return element.tagName.toLowerCase();
     }
 
