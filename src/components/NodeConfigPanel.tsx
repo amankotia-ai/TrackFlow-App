@@ -98,13 +98,49 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
             </label>
             <div className="space-y-2">
               <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(e) => handleConfigChange(field.key, e.target.value)}
-                  placeholder={field.placeholder}
-                  className="flex-1 px-4 py-3 border border-secondary-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm"
-                />
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => handleConfigChange(field.key, e.target.value)}
+                    onPaste={(e) => {
+                      // Enhanced paste handling for DOM tree copied selectors
+                      setTimeout(() => {
+                        const clipboardData = (window as any).trackflowClipboard?.lastCopiedSelector;
+                        if (clipboardData && clipboardData.selector === e.currentTarget.value) {
+                          // Auto-populate originalText for text replacement actions
+                          if (localNode.type === 'action' && localNode.name === 'Replace Text' && 
+                              field.key === 'selector' && clipboardData.elementInfo?.text) {
+                            handleConfigChange('originalText', clipboardData.elementInfo.text);
+                          }
+                          
+                          // Show helpful tooltip about the copied selector
+                          if (clipboardData.executionHints?.length > 0) {
+                            console.log('💡 Selector execution hints:', clipboardData.executionHints);
+                          }
+                        }
+                      }, 100);
+                    }}
+                    placeholder={field.placeholder}
+                    className="w-full px-4 py-3 border border-secondary-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm"
+                  />
+                  {/* Selector quality indicator */}
+                  {value && (() => {
+                    const clipboardData = (window as any).trackflowClipboard?.lastCopiedSelector;
+                    if (clipboardData && clipboardData.selector === value) {
+                      const quality = clipboardData.reliability >= 0.8 ? 'high' : 
+                                    clipboardData.reliability >= 0.5 ? 'medium' : 'low';
+                      const colorClass = quality === 'high' ? 'text-green-600' : 
+                                        quality === 'medium' ? 'text-yellow-600' : 'text-red-600';
+                      return (
+                        <div className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-xs ${colorClass}`}>
+                          {quality === 'high' ? '●' : quality === 'medium' ? '◐' : '○'}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
                 {scrapedElements.length > 0 && (
                   <ElementSelectorButton
                     elements={scrapedElements}
@@ -124,9 +160,31 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
               {field.description && (
                 <p className="text-xs text-secondary-500">{field.description}</p>
               )}
+              {/* Enhanced feedback for pasted selectors */}
+              {value && (() => {
+                const clipboardData = (window as any).trackflowClipboard?.lastCopiedSelector;
+                if (clipboardData && clipboardData.selector === value) {
+                  return (
+                    <div className="text-xs bg-blue-50 p-2 rounded border border-blue-200">
+                      <div className="font-medium text-blue-800">📋 {clipboardData.description}</div>
+                      {clipboardData.executionHints?.length > 0 && (
+                        <div className="mt-1 text-blue-600">
+                          💡 {clipboardData.executionHints.join(' • ')}
+                        </div>
+                      )}
+                      {clipboardData.reliability < 0.8 && (
+                        <div className="mt-1 text-yellow-700">
+                          ⚠️ Reliability: {Math.round(clipboardData.reliability * 100)}% - Consider using a more specific selector
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               {scrapedElements.length === 0 && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded border border-yellow-200">
-                  💡 Tip: Scrape a webpage first to enable element selection
+                  💡 Tip: Scrape a webpage first to enable element selection, or copy selectors from the DOM tree view
                 </p>
               )}
             </div>

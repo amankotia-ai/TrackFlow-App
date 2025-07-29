@@ -31,6 +31,10 @@
       this.contentHidden = false;
       this.initializationComplete = false;
       
+      // Modal loop prevention (consistent with unified system)
+      this.activeModals = new Set();
+      this.modalShowHistory = new Map();
+      
       // Hide content immediately if enabled
       if (this.config.hideContentDuringInit) {
         this.hideContentDuringInitialization();
@@ -510,6 +514,9 @@
           }
         });
         
+        // Clean up modal state tracking
+        this.activeModals.delete(config.selector);
+        
         this.logActionExecution('Hide Element', config.selector);
       };
       
@@ -525,6 +532,29 @@
 
     async executeShowElement(config) {
       const elements = document.querySelectorAll(config.selector);
+      
+      // Modal loop prevention: Check if already visible
+      const isVisible = elements.length > 0 && Array.from(elements).some(el => {
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      });
+      
+      if (isVisible) {
+        if (this.config.debug) {
+          console.log(`⚠️ Legacy Executor: Element already visible, skipping show action: ${config.selector}`);
+        }
+        return;
+      }
+      
+      // Check recent show history
+      const now = Date.now();
+      const lastShown = this.modalShowHistory.get(config.selector);
+      if (lastShown && (now - lastShown) < 3000) {
+        if (this.config.debug) {
+          console.log(`⚠️ Legacy Executor: Element recently shown, skipping: ${config.selector}`);
+        }
+        return;
+      }
       
       // Apply delay if specified (non-blocking)
       const delay = parseInt(config.delay) || 0;
@@ -547,6 +577,10 @@
             }, 10);
           }
         });
+        
+        // Track modal state
+        this.activeModals.add(config.selector);
+        this.modalShowHistory.set(config.selector, now);
         
         this.logActionExecution('Show Element', config.selector);
       };

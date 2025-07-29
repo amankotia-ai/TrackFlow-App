@@ -41,14 +41,40 @@
       this.selectorRulesMap = new Map(); // Map selectors to rules for efficient processing
       this.mutationObserver = null; // For dynamic content tracking
       this.lastScrollCheck = 0; // Throttle scroll events
-      this.lastTimeCheck = 0; // Throttle time-based triggers
+      this.lastTimeCheck = 0;
       
-      // Auto-hide content if enabled and anti-flicker script hasn't already done it
-      if (this.config.hideContentDuringInit && !window.unifiedWorkflowAntiFlicker?.isContentHidden()) {
-        this.safeHideContent();
-      }
+      // NEW: Modal state tracking and close button detection
+      this.activeModals = new Set(); // Track currently visible modals
+      this.modalShowHistory = new Map(); // Track when modals were last shown
+      this.dismissClickCache = new Set(); // Cache dismiss/close button clicks
       
-      this.log('🎯 Unified Workflow System: Starting...');
+      // Common close button patterns
+      this.closeButtonPatterns = [
+        /close/i,
+        /dismiss/i,
+        /cancel/i,
+        /x/i,
+        /✕/,
+        /×/,
+        /❌/,
+        /🗙/
+      ];
+      
+      // Close button selectors
+      this.closeButtonSelectors = [
+        '[data-dismiss]',
+        '[data-close]',
+        '.close',
+        '.dismiss',
+        '.modal-close',
+        '.popup-close',
+        '.btn-close',
+        '.close-btn',
+        '.cancel',
+        '.cancel-btn'
+      ];
+      
+      this.log('🎯 Unified Workflow System: Initialized with modal loop prevention');
     }
 
     /**
@@ -514,9 +540,34 @@
         }
       }, 10000); // Check every 10 seconds instead of every second
 
-      // Click tracking - single execution per click
+      // Click tracking - single execution per click with close button detection
       document.addEventListener('click', (event) => {
         const selector = this.generateSelector(event.target);
+        
+        // NEW: Detect and ignore close button clicks to prevent modal loops
+        if (this.isCloseButton(event.target)) {
+          this.log(`🚫 Ignoring close button click: ${selector}`, 'info');
+          
+          // Track this as a dismiss action and clean up modal state
+          const dismissKey = `dismiss-${selector}-${Date.now()}`;
+          this.dismissClickCache.add(dismissKey);
+          
+          // Clean up modal state tracking for any modals that might be closing
+          setTimeout(() => {
+            // Remove from active modals any that are no longer visible
+            for (const modalSelector of this.activeModals) {
+              if (!this.isElementVisible(modalSelector)) {
+                this.activeModals.delete(modalSelector);
+                this.log(`🧹 Removed ${modalSelector} from active modals`, 'info');
+              }
+            }
+            // Clean up dismiss cache after 5 seconds
+            this.dismissClickCache.delete(dismissKey);
+          }, 1000);
+          
+          return; // Don't process workflows for close button clicks
+        }
+        
         const clickKey = `click-${selector}-${Date.now()}`;
         
         // Prevent duplicate click events
@@ -546,6 +597,81 @@
       });
 
       this.log('👂 Event listeners configured with proper throttling');
+    }
+
+    /**
+     * Detect if a clicked element is a close/dismiss button
+     */
+    isCloseButton(element) {
+      if (!element) return false;
+      
+      // Check if element matches close button selectors
+      for (const selector of this.closeButtonSelectors) {
+        if (element.matches && element.matches(selector)) {
+          this.log(`🚫 Close button detected via selector: ${selector}`, 'info');
+          return true;
+        }
+      }
+      
+      // Check parent elements up to 3 levels for close button selectors
+      let parent = element.parentElement;
+      let level = 0;
+      while (parent && level < 3) {
+        for (const selector of this.closeButtonSelectors) {
+          if (parent.matches && parent.matches(selector)) {
+            this.log(`🚫 Close button detected via parent selector: ${selector}`, 'info');
+            return true;
+          }
+        }
+        parent = parent.parentElement;
+        level++;
+      }
+      
+      // Check text content against close button patterns
+      const textContent = (element.textContent || element.innerText || '').trim();
+      for (const pattern of this.closeButtonPatterns) {
+        if (pattern.test(textContent)) {
+          this.log(`🚫 Close button detected via text pattern: "${textContent}"`, 'info');
+          return true;
+        }
+      }
+      
+      // Check for onclick handlers that contain common close actions
+      const onclickAttr = element.getAttribute('onclick') || '';
+      if (onclickAttr.includes('display=') && onclickAttr.includes('none')) {
+        this.log(`🚫 Close button detected via onclick attribute`, 'info');
+        return true;
+      }
+      
+      // Check aria-label
+      const ariaLabel = element.getAttribute('aria-label') || '';
+      for (const pattern of this.closeButtonPatterns) {
+        if (pattern.test(ariaLabel)) {
+          this.log(`🚫 Close button detected via aria-label: "${ariaLabel}"`, 'info');
+          return true;
+        }
+      }
+      
+      return false;
+    }
+
+    /**
+     * Check if an element is currently visible (for modal state tracking)
+     */
+    isElementVisible(selector) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        for (const element of elements) {
+          const style = window.getComputedStyle(element);
+          if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+            return true;
+          }
+        }
+        return false;
+      } catch (error) {
+        this.log(`Error checking element visibility for ${selector}: ${error.message}`, 'warning');
+        return false;
+      }
     }
 
     /**
@@ -780,8 +906,32 @@
      * Evaluate element click trigger
      */
     evaluateElementClickTrigger(config, eventData) {
-      return eventData.eventType === 'click' && 
-             eventData.elementSelector === config.selector;
+      // Basic click and selector match
+      const isMatch = eventData.eventType === 'click' && 
+                     eventData.elementSelector === config.selector;
+      
+      if (!isMatch) return false;
+      
+      // NEW: Enhanced caching for click events to prevent rapid re-triggering
+      const clickCacheKey = `click-${config.selector}-${eventData.elementSelector}`;
+      const now = Date.now();
+      
+      // Check if this exact click combination was recently processed
+      if (this.triggeredWorkflows.has(clickCacheKey)) {
+        const lastTriggered = this.triggeredWorkflows.get(clickCacheKey);
+        const timeSinceLastTrigger = now - lastTriggered;
+        
+        // Prevent re-triggering the same click combination within 5 seconds
+        if (timeSinceLastTrigger < 5000) {
+          this.log(`⏭️ Skipping recent click trigger: ${config.selector} (last triggered ${Math.round(timeSinceLastTrigger/1000)}s ago)`, 'info');
+          return false;
+        }
+      }
+      
+      // Cache this click combination
+      this.triggeredWorkflows.set(clickCacheKey, now);
+      
+      return true;
     }
 
     /**
@@ -1374,8 +1524,11 @@
             hiddenCount++;
           });
           
+          // NEW: Clean up modal state tracking when hiding elements
+          this.activeModals.delete(config.selector);
+          
           this.completedModifications.add(`hideElement:${config.selector}`);
-          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector})`, 'success');
+          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector}) - Removed from active modals tracking`, 'success');
         };
         
         if (delay > 0) {
@@ -1403,6 +1556,20 @@
           return { success: false, error: 'No elements found' };
         }
         
+        // NEW: Check if modal is already visible to prevent re-showing
+        if (this.isElementVisible(config.selector)) {
+          this.log(`⚠️ Element already visible, skipping show action: ${config.selector}`, 'warning');
+          return { success: false, error: 'Element already visible' };
+        }
+        
+        // NEW: Check recent show history to prevent rapid re-showing
+        const now = Date.now();
+        const lastShown = this.modalShowHistory.get(config.selector);
+        if (lastShown && (now - lastShown) < 3000) { // 3 second cooldown
+          this.log(`⚠️ Element was recently shown, skipping to prevent loop: ${config.selector}`, 'warning');
+          return { success: false, error: 'Element recently shown' };
+        }
+        
         // Apply delay if specified (non-blocking)
         const delay = parseInt(config.delay) || 0;
         
@@ -1416,8 +1583,12 @@
             }
           });
           
+          // NEW: Track modal state
+          this.activeModals.add(config.selector);
+          this.modalShowHistory.set(config.selector, now);
+          
           this.completedModifications.add(`showElement:${config.selector}`);
-          this.log(`✅ Shown ${elements.length} elements (${config.selector})`);
+          this.log(`✅ Shown ${elements.length} elements (${config.selector}) - Added to active modals tracking`);
         };
         
         if (delay > 0) {

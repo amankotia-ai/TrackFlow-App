@@ -62,9 +62,36 @@ const ElementSelectorModal: React.FC<ElementSelectorModalProps> = ({
     setSelectedSelector(selector);
   };
 
-  const handleCopySelector = async (selector: string) => {
+  const handleCopySelector = async (selector: string, element?: ScrapedElement) => {
     try {
       await navigator.clipboard.writeText(selector);
+      
+      // Store enhanced metadata for configuration panel integration
+      if (element) {
+        const clipboardData = {
+          selector,
+          description: `Selected from element browser`,
+          elementInfo: {
+            tag: element.tag,
+            text: element.text?.substring(0, 50) || '',
+            hasId: !!element.attributes?.id,
+            hasClass: !!element.attributes?.class,
+            elementType: 'content' as const,
+            isUnique: true // Assume selected elements are intentionally unique
+          },
+          reliability: element.selectorReliability || 0.8,
+          executionHints: element.attributes?.id ? 
+            ['ID-based selector should be highly reliable'] : 
+            ['Consider adding originalText for text-based actions']
+        };
+        
+        if ((window as any).trackflowClipboard) {
+          (window as any).trackflowClipboard.lastCopiedSelector = clipboardData;
+        } else {
+          (window as any).trackflowClipboard = { lastCopiedSelector: clipboardData };
+        }
+      }
+      
       setCopiedSelector(selector);
       setTimeout(() => setCopiedSelector(''), 2000);
     } catch (error) {
@@ -307,7 +334,7 @@ const ElementSelectorModal: React.FC<ElementSelectorModalProps> = ({
                         placeholder="CSS selector..."
                       />
                       <button
-                        onClick={() => handleCopySelector(selectedSelector)}
+                        onClick={() => handleCopySelector(selectedSelector, selectedElement || undefined)}
                         className="px-4 py-3 bg-secondary-100 hover:bg-secondary-200 rounded-lg transition-colors"
                         title="Copy selector"
                       >

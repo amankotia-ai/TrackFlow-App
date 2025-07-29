@@ -19,6 +19,8 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import { optimizeSelectorForExecution, createClipboardData } from '../utils/selectorOptimizer';
+
 // Updated interface for hierarchical elements
 interface SelectorStrategy {
   selector: string;
@@ -134,40 +136,89 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
     setExpandedNodes(newExpanded);
   };
 
-  const copySelector = async (element: HierarchicalElement, selectorType: 'class' | 'id' | 'full' | 'unique' | 'strategy' = 'class', strategyIndex?: number) => {
+  const copySelector = async (element: HierarchicalElement, selectorType: 'class' | 'id' | 'full' | 'unique' | 'strategy' | 'optimized' = 'class', strategyIndex?: number) => {
     let selectorToCopy = '';
+    let selectorDescription = '';
     
     if (selectorType === 'class' && element.attributes?.class) {
-      // Create a clean CSS class selector
-      const classes = element.attributes.class.split(' ').filter(cls => cls.trim());
+      const classes = element.attributes.class.split(' ').filter((cls: string) => cls.trim());
       if (classes.length > 0) {
-        // Use the first class for simplicity, or combine them
-        selectorToCopy = `.${classes[0]}`;
-        // If multiple classes, provide the combined selector
-        if (classes.length > 1) {
-          selectorToCopy = `.${classes.join('.')}`;
+        if (classes.length === 1) {
+          selectorToCopy = `.${classes[0]}`;
+          selectorDescription = `Class selector (${classes[0]})`;
+        } else {
+          const stableClasses = classes.filter((cls: string) => !cls.match(/^(hover:|focus:|active:|disabled:|selected:)/));
+          if (stableClasses.length > 0) {
+            const selectedClasses = stableClasses.slice(0, 3);
+            selectorToCopy = `.${selectedClasses.join('.')}`;
+            selectorDescription = `Combined class selector (${selectedClasses.join(', ')})`;
+          } else {
+            selectorToCopy = `.${classes[0]}`;
+            selectorDescription = `Class selector (${classes[0]}) - Warning: May be dynamic`;
+          }
         }
       }
     } else if (selectorType === 'id' && element.attributes?.id) {
-      // Create a clean CSS ID selector
       selectorToCopy = `#${element.attributes.id}`;
+      selectorDescription = `ID selector (unique)`;
     } else if (selectorType === 'full') {
-      // Use the full generated selector
       selectorToCopy = element.selector;
+      selectorDescription = `Primary selector`;
     } else if (selectorType === 'unique' && element.uniqueSelector) {
-      // Use the guaranteed unique selector
       selectorToCopy = element.uniqueSelector;
+      selectorDescription = `Guaranteed unique selector`;
     } else if (selectorType === 'strategy' && element.selectorStrategies && strategyIndex !== undefined) {
-      // Use a specific strategy selector
       const strategy = element.selectorStrategies[strategyIndex];
-      selectorToCopy = strategy?.selector || '';
+      if (strategy) {
+        selectorToCopy = strategy.selector;
+        selectorDescription = `${strategy.type} selector (${Math.round(strategy.reliability * 100)}% reliable)`;
+      }
+    } else if (selectorType === 'optimized') {
+      const metadata = optimizeSelectorForExecution(element, {
+        includePosition: true,
+        maxComplexity: 5
+      });
+      selectorToCopy = metadata.selector;
+      selectorDescription = metadata.description;
     }
     
     if (selectorToCopy) {
       try {
         await navigator.clipboard.writeText(selectorToCopy);
+        
+        // Store enhanced metadata for configuration panel integration
+        if (selectorType === 'optimized') {
+          const metadata = optimizeSelectorForExecution(element, {
+            includePosition: true,
+            maxComplexity: 5
+          });
+          const clipboardData = createClipboardData(metadata, 'DOM Tree - Optimized');
+          (window as any).trackflowClipboard = { lastCopiedSelector: clipboardData };
+        } else {
+          // Store basic metadata for other selector types
+          const clipboardData = {
+            selector: selectorToCopy,
+            description: selectorDescription,
+            elementInfo: {
+              tag: element.tag,
+              text: element.text?.substring(0, 50) || '',
+              hasId: !!element.attributes?.id,
+              hasClass: !!element.attributes?.class,
+              elementType: element.elementType,
+              isUnique: selectorType === 'id' || selectorType === 'unique'
+            },
+            reliability: selectorType === 'id' ? 0.95 : selectorType === 'unique' ? 0.9 : 0.7,
+            executionHints: ['Consider using originalText for text-based actions'],
+            source: 'DOM Tree'
+          };
+          (window as any).trackflowClipboard = { lastCopiedSelector: clipboardData };
+        }
+        
         setCopiedElementId(element.id);
         setTimeout(() => setCopiedElementId(null), 2000);
+        
+        console.log(`📋 Copied selector: ${selectorToCopy}`);
+        
       } catch (err) {
         console.error('Failed to copy selector:', err);
         // Fallback for older browsers
@@ -224,20 +275,19 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
 
   const getElementTypeColor = (element: HierarchicalElement) => {
     switch (element.elementType) {
-      case 'structure': return 'bg-blue-50 border-blue-200';
-      case 'container': return 'bg-gray-50 border-gray-200';
-      case 'content': return 'bg-green-50 border-green-200';
-      case 'interactive': return 'bg-orange-50 border-orange-200';
-      case 'media': return 'bg-purple-50 border-purple-200';
-      default: return 'bg-gray-50 border-gray-200';
+      case 'structure': return 'bg-blue-100 text-blue-800';
+      case 'container': return 'bg-gray-100 text-gray-800';
+      case 'content': return 'bg-green-100 text-green-800';
+      case 'interactive': return 'bg-orange-100 text-orange-800';
+      case 'media': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-600';
     }
   };
 
-  const renderElement = (element: HierarchicalElement, parentPath: string = ''): React.ReactNode => {
+  const renderElement = (element: HierarchicalElement): React.ReactNode => {
     const hasChildren = element.children.length > 0;
     const isExpanded = expandedNodes.has(element.id);
     const isSelected = selectedElement?.id === element.id;
-    const currentPath = parentPath ? `${parentPath} > ${element.tag}` : element.tag;
 
     return (
       <div key={element.id} className="select-none">
@@ -275,47 +325,35 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
           </div>
           
           {/* Element Info */}
-          <div className="flex-1 flex items-center space-x-2 min-w-0">
-            {/* Tag */}
-            <span className="text-sm font-mono text-blue-700 font-medium">
-              &lt;{element.tag}
-            </span>
+          <div className="flex-1 min-w-0 mr-2">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-mono">
+                {element.tag}
+              </span>
+              
+              {element.attributes?.id && (
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-mono">
+                  #{element.attributes.id}
+                </span>
+              )}
+              
+              {element.attributes?.class && (
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-mono max-w-xs truncate">
+                  .{element.attributes.class.split(' ')[0]}
+                  {element.attributes.class.split(' ').length > 1 && '...'}
+                </span>
+              )}
+            </div>
             
-            {/* Attributes */}
-            {element.attributes && (
-              <div className="flex items-center space-x-1">
-                {element.attributes.id && (
-                  <span className="text-xs font-mono text-green-700">
-                    id="{element.attributes.id}"
-                  </span>
-                )}
-                {element.attributes.class && (
-                  <span className="text-xs font-mono text-purple-700">
-                    class="{element.attributes.class.split(' ').slice(0, 2).join(' ')}"
-                    {element.attributes.class.split(' ').length > 2 && '...'}
-                  </span>
-                )}
+            {element.text && (
+              <div className="text-sm text-gray-900 truncate mt-1">
+                {element.text.substring(0, 100)}
+                {element.text.length > 100 && '...'}
               </div>
-            )}
-            
-            <span className="text-sm font-mono text-blue-700">&gt;</span>
-            
-            {/* Direct Text Content */}
-            {element.directText && (
-              <span className="text-sm text-gray-800 truncate max-w-xs">
-                {element.directText}
-              </span>
-            )}
-            
-            {/* Children count for containers */}
-            {hasChildren && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                {element.children.length} {element.children.length === 1 ? 'child' : 'children'}
-              </span>
             )}
           </div>
           
-          {/* Uniqueness Indicator */}
+          {/* Targeting Information */}
           {element.selectorStrategies && (
             <div className="flex items-center space-x-1">
               {element.selectorStrategies.some(s => s.isUnique) ? (
@@ -429,6 +467,27 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
                 </>
               )}
             </button>
+            
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                copySelector(element, 'optimized');
+              }}
+              className="p-1 hover:bg-green-100 rounded-md flex items-center space-x-1 text-xs text-green-600 hover:text-green-800 border border-green-200"
+              title="Copy optimized selector for workflow execution"
+            >
+              {copiedElementId === element.id ? (
+                <>
+                  <Check className="w-3 h-3 text-green-600" />
+                  <span className="text-green-600">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3 h-3" />
+                  <span>Optimized</span>
+                </>
+              )}
+            </button>
           </div>
           
           {/* Element Type Badge */}
@@ -439,117 +498,69 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
         
         {/* Children */}
         {hasChildren && isExpanded && (
-          <div className="ml-1">
-            {element.children.map(child => renderElement(child, currentPath))}
-          </div>
-        )}
-        
-        {/* Closing tag indicator for containers */}
-        {hasChildren && isExpanded && (
-          <div
-            className="flex items-center py-1 px-2 text-gray-400"
-            style={{ marginLeft: `${element.depth * 20}px` }}
-          >
-            <div className="w-4 h-4 mr-2"></div>
-            <div className="w-4 h-4 mr-2"></div>
-            <span className="text-sm font-mono">
-              &lt;/{element.tag}&gt;
-            </span>
+          <div className="ml-4">
+            {element.children.map(child => renderElement(child))}
           </div>
         )}
       </div>
     );
   };
 
-  const totalElements = useMemo(() => {
-    let count = 0;
-    function countElements(elements: HierarchicalElement[]) {
-      elements.forEach(element => {
-        count++;
-        countElements(element.children);
-      });
-    }
-    countElements(elements);
-    return count;
-  }, [elements]);
-
   return (
-    <div className="hierarchical-dom-view bg-white rounded-lg border border-gray-200 overflow-hidden">
-      {/* Header Controls */}
-      <div className="bg-gray-50 border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
-              <Eye className="w-5 h-5" />
-              <span>DOM Tree Structure</span>
-            </h3>
-            <span className="text-sm text-gray-500">
-              {totalElements} elements in hierarchical structure
-            </span>
+    <div className="h-full flex flex-col bg-white">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+        <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+          <Code className="w-5 h-5 text-blue-600" />
+          <span>DOM Structure</span>
+          <span className="text-sm text-gray-500 font-normal">
+            ({filteredElements.length} root elements)
+          </span>
+        </h3>
+        
+        <div className="flex items-center space-x-2">
+          {/* Filter Buttons */}
+          <div className="flex items-center space-x-1 bg-white rounded-lg border border-gray-200 p-1">
+            {[
+              { key: 'all', label: 'All', icon: Square },
+              { key: 'containers', label: 'Containers', icon: Folder },
+              { key: 'content', label: 'Content', icon: FileText },
+              { key: 'interactive', label: 'Interactive', icon: Zap }
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setFilterType(key as any)}
+                className={`px-3 py-1 text-sm rounded-md transition-colors flex items-center space-x-1 ${
+                  filterType === key
+                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
           
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setPreviewMode('desktop')}
-              className={`p-2 rounded ${previewMode === 'desktop' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
-            >
-              <Monitor className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setPreviewMode('mobile')}
-              className={`p-2 rounded ${previewMode === 'mobile' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
-            >
-              <Smartphone className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setShowCode(!showCode)}
-              className={`p-2 rounded ${showCode ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-100'}`}
-            >
-              <Code className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Controls */}
-        <div className="flex flex-wrap gap-2">
-          {[
-            { key: 'all', label: 'All Elements' },
-            { key: 'containers', label: 'Containers' },
-            { key: 'content', label: 'Content' },
-            { key: 'interactive', label: 'Interactive' }
-          ].map(filter => (
-            <button
-              key={filter.key}
-              onClick={() => setFilterType(filter.key as any)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                filterType === filter.key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+          {/* View Toggle */}
+          <button
+            onClick={() => setShowCode(!showCode)}
+            className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center space-x-2 ${
+              showCode
+                ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            <span>{showCode ? 'Hide Details' : 'Show Details'}</span>
+          </button>
         </div>
       </div>
 
-      {/* DOM Tree Display */}
-      <div className="flex-1 overflow-y-auto">
-        <div className={`
-          p-4 min-h-full font-mono text-sm
-          ${previewMode === 'mobile' ? 'max-w-sm mx-auto' : 'max-w-6xl mx-auto'}
-        `}>
-          {filteredElements.length > 0 ? (
-            <div className="space-y-1">
-              {filteredElements.map(element => renderElement(element))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <div className="text-gray-400 text-6xl mb-4">🌳</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No elements to display</h3>
-              <p className="text-gray-500">Try adjusting your filter or check the scraping results.</p>
-            </div>
-          )}
+      {/* Tree View */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className="space-y-1">
+          {filteredElements.map(element => renderElement(element))}
         </div>
       </div>
 
@@ -612,23 +623,20 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
           {/* Selector Strategies */}
           {selectedElement.selectorStrategies && selectedElement.selectorStrategies.length > 0 && (
             <div className="mt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h5 className="font-medium text-gray-900">Targeting Strategies</h5>
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-medium text-gray-900">Available Targeting Strategies</div>
                 <button
                   onClick={() => setShowSelectorStrategies(!showSelectorStrategies)}
-                  className="text-xs text-blue-600 hover:text-blue-800"
+                  className="text-sm text-blue-600 hover:text-blue-800"
                 >
-                  {showSelectorStrategies ? 'Hide' : 'Show'} Strategies
+                  {showSelectorStrategies ? 'Hide' : 'Show'} ({selectedElement.selectorStrategies.length})
                 </button>
               </div>
               
               {showSelectorStrategies && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {selectedElement.selectorStrategies.map((strategy, index) => (
-                    <div 
-                      key={index} 
-                      className={`p-3 rounded-lg border ${strategy.isUnique ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}
-                    >
+                    <div key={index} className="bg-white p-3 rounded border">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -661,15 +669,6 @@ const HierarchicalDOMView: React.FC<HierarchicalDOMViewProps> = ({ elements, onE
                   ))}
                 </div>
               )}
-            </div>
-          )}
-          
-          {selectedElement.directText && (
-            <div className="mt-3">
-              <div><strong>Direct Text Content:</strong></div>
-              <div className="bg-gray-100 p-2 rounded text-xs mt-1">
-                {selectedElement.directText}
-              </div>
             </div>
           )}
         </div>
