@@ -112,16 +112,29 @@
         
         <div>
             <button class="test-button" id="trigger-modal">🎯 Trigger Modal (Original Issue)</button>
-            <p><small>This should show the modal without creating a loop when you close it</small></p>
+            <p><small>✅ Should show modal once, no loop when closed<br>
+            ❌ Clicking again should NOT show modal (one-time execution per page load)</small></p>
         </div>
         
         <div>
             <button class="test-button" id="rapid-clicks">⚡ Rapid Click Test</button>
-            <p><small>Click rapidly to test the click event deduplication</small></p>
+            <p><small>Click rapidly - should only execute once due to one-time execution rules</small></p>
+        </div>
+        
+        <div>
+            <h4>Expected Behavior:</h4>
+            <ul style="font-size: 14px; margin: 10px 0;">
+                <li>✅ First click shows modal</li>
+                <li>✅ Close button works without loop</li>
+                <li>✅ Subsequent clicks are ignored (shows "already executed" message)</li>
+                <li>✅ Use "Reset Page Cache" to allow actions to execute again</li>
+            </ul>
         </div>
         
         <div>
             <button class="test-button" id="clear-logs">🧹 Clear Logs</button>
+            <button class="test-button" id="reset-cache">🔄 Reset Page Cache</button>
+            <button class="test-button" id="show-stats">📊 Show Stats</button>
         </div>
         
         <h3>System Logs</h3>
@@ -253,6 +266,30 @@
         document.getElementById('clear-logs').addEventListener('click', () => {
             document.getElementById('logs').textContent = '';
             addLog('🧹 Logs cleared');
+        });
+        
+        // Reset page cache button
+        document.getElementById('reset-cache').addEventListener('click', () => {
+            if (window.workflowSystem && window.workflowSystem.resetPageLoadCache) {
+                window.workflowSystem.resetPageLoadCache();
+                addLog('🔄 Page load cache reset - actions can execute again');
+            } else {
+                addLog('❌ Workflow system not ready');
+            }
+        });
+        
+        // Show stats button
+        document.getElementById('show-stats').addEventListener('click', () => {
+            if (window.workflowSystem && window.workflowSystem.getExecutionStats) {
+                const stats = window.workflowSystem.getExecutionStats();
+                addLog(`📊 Execution Stats:`);
+                addLog(`   - Page Load ID: ${stats.pageLoadId}`);
+                addLog(`   - Actions executed this load: ${stats.executedActionsThisLoad}`);
+                addLog(`   - Total actions: ${stats.totalExecutedActions}`);
+                addLog(`   - Active modals: ${stats.activeModals}`);
+            } else {
+                addLog('❌ Workflow system not ready');
+            }
         });
         
         // Override console.log to show in our logs too

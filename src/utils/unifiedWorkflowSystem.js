@@ -29,6 +29,10 @@
       this.executedWorkflows = new Set(); // Track executed workflows to prevent duplicates
       this.triggeredWorkflows = new Map(); // Cache triggered workflows to prevent re-triggering
       this.processingWorkflows = false; // Flag to prevent recursive processWorkflows calls
+      
+      // NEW: One-time action execution tracking per page load
+      this.pageLoadActionCache = new Set(); // Track actions executed this page load
+      this.pageLoadId = Date.now(); // Unique ID for this page load session
       this.geolocationData = null; // Initialize geolocation data
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
@@ -675,6 +679,28 @@
     }
 
     /**
+     * Reset page load action cache (for testing or page navigation)
+     */
+    resetPageLoadCache() {
+      const previousSize = this.pageLoadActionCache.size;
+      this.pageLoadActionCache.clear();
+      this.pageLoadId = Date.now();
+      this.log(`🔄 Reset page load cache (cleared ${previousSize} actions)`, 'info');
+    }
+
+    /**
+     * Get current page load execution stats
+     */
+    getExecutionStats() {
+      return {
+        pageLoadId: this.pageLoadId,
+        executedActionsThisLoad: this.pageLoadActionCache.size,
+        totalExecutedActions: this.executedActions.size,
+        activeModals: this.activeModals.size
+      };
+    }
+
+    /**
      * Handle runtime events
      */
     async handleEvent(eventData) {
@@ -1113,15 +1139,31 @@
      * Execute a single action
      */
     async executeAction(action) {
-      const actionKey = `${action.id}-${Date.now()}`;
+      const { config = {}, name } = action;
       
-      // Prevent duplicate executions
+      // NEW: Create stable action key for one-time execution per page load
+      const stableActionKey = `${name}-${config.selector || 'no-selector'}-${JSON.stringify(config)}`;
+      
+      // Check if this exact action has already been executed this page load
+      if (this.pageLoadActionCache.has(stableActionKey)) {
+        this.log(`⏭️ Skipping already executed action: ${name} (${config.selector})`, 'warning');
+        return { success: false, reason: 'already_executed_this_page_load' };
+      }
+      
+      // For certain actions, enforce one-time execution per page load
+      const oneTimeActions = ['Show Element', 'Hide Element', 'Modify CSS', 'Add Class', 'Remove Class'];
+      if (oneTimeActions.includes(name)) {
+        this.pageLoadActionCache.add(stableActionKey);
+        this.log(`🔒 Marked as executed for page load: ${name} (${config.selector})`, 'info');
+      }
+      
+      // Legacy execution tracking (keep for backward compatibility)
+      const actionKey = `${action.id}-${Date.now()}`;
       if (this.executedActions.has(actionKey)) {
         return { success: false, reason: 'already_executed' };
       }
       this.executedActions.add(actionKey);
       
-      const { config = {}, name } = action;
       this.log(`⚡ Executing: ${name}`, config);
 
       try {

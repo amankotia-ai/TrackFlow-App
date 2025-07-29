@@ -35,6 +35,10 @@
       this.activeModals = new Set();
       this.modalShowHistory = new Map();
       
+      // NEW: One-time action execution tracking per page load
+      this.pageLoadActionCache = new Set();
+      this.pageLoadId = Date.now();
+      
       // Hide content immediately if enabled
       if (this.config.hideContentDuringInit) {
         this.hideContentDuringInitialization();
@@ -200,17 +204,36 @@
      * Execute workflow actions
      */
     async executeAction(action, context = {}) {
-      const actionKey = `${action.id}-${Date.now()}`;
+      // Transform action to standardized format if needed
+      const standardizedAction = this.transformActionToStandard(action);
+      const { config = {}, name } = standardizedAction;
       
-      // Prevent duplicate executions
-      if (this.executedActions.has(actionKey)) {
+      // NEW: Create stable action key for one-time execution per page load
+      const stableActionKey = `${name}-${config.selector || 'no-selector'}-${JSON.stringify(config)}`;
+      
+      // Check if this exact action has already been executed this page load
+      if (this.pageLoadActionCache.has(stableActionKey)) {
+        if (this.config.debug) {
+          console.log(`⏭️ Legacy Executor: Skipping already executed action: ${name} (${config.selector})`);
+        }
         return;
       }
       
-      this.executedActions.add(actionKey);
+      // For certain actions, enforce one-time execution per page load
+      const oneTimeActions = ['Show Element', 'Hide Element', 'Modify CSS', 'Add Class', 'Remove Class'];
+      if (oneTimeActions.includes(name)) {
+        this.pageLoadActionCache.add(stableActionKey);
+        if (this.config.debug) {
+          console.log(`🔒 Legacy Executor: Marked as executed for page load: ${name} (${config.selector})`);
+        }
+      }
       
-      // Transform action to standardized format if needed
-      const standardizedAction = this.transformActionToStandard(action);
+      // Legacy execution tracking (keep for backward compatibility)
+      const actionKey = `${action.id}-${Date.now()}`;
+      if (this.executedActions.has(actionKey)) {
+        return;
+      }
+      this.executedActions.add(actionKey);
       
       if (this.config.debug) {
         console.log(`⚡ Executing action: ${standardizedAction.name}`, standardizedAction.config);
