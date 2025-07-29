@@ -287,6 +287,8 @@
                 addLog(`   - Actions executed this load: ${stats.executedActionsThisLoad}`);
                 addLog(`   - Total actions: ${stats.totalExecutedActions}`);
                 addLog(`   - Active modals: ${stats.activeModals}`);
+                addLog(`   - Prevented actions: ${stats.preventedActions}`);
+                addLog(`   - Element states: ${JSON.stringify(stats.elementStates)}`);
             } else {
                 addLog('❌ Workflow system not ready');
             }

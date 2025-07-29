@@ -33,6 +33,10 @@
       // NEW: One-time action execution tracking per page load
       this.pageLoadActionCache = new Set(); // Track actions executed this page load
       this.pageLoadId = Date.now(); // Unique ID for this page load session
+      
+      // NEW: Element state awareness to prevent re-showing visible elements
+      this.elementStateCache = new Map(); // Track current state of elements
+      this.preventedActions = new Set(); // Track actions that should be prevented
       this.geolocationData = null; // Initialize geolocation data
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
@@ -562,7 +566,13 @@
             for (const modalSelector of this.activeModals) {
               if (!this.isElementVisible(modalSelector)) {
                 this.activeModals.delete(modalSelector);
-                this.log(`🧹 Removed ${modalSelector} from active modals`, 'info');
+                this.elementStateCache.set(modalSelector, 'hidden');
+                
+                // CRITICAL: Remove show prevention when element is closed
+                const preventKey = `show-${modalSelector}`;
+                this.preventedActions.delete(preventKey);
+                
+                this.log(`🧹 Cleaned up state for closed element: ${modalSelector}`, 'info');
               }
             }
             // Clean up dismiss cache after 5 seconds
@@ -683,9 +693,16 @@
      */
     resetPageLoadCache() {
       const previousSize = this.pageLoadActionCache.size;
+      const preventedSize = this.preventedActions.size;
+      
       this.pageLoadActionCache.clear();
+      this.preventedActions.clear();
+      this.elementStateCache.clear();
+      this.activeModals.clear();
+      this.modalShowHistory.clear();
       this.pageLoadId = Date.now();
-      this.log(`🔄 Reset page load cache (cleared ${previousSize} actions)`, 'info');
+      
+      this.log(`🔄 FULL RESET: Cleared ${previousSize} actions, ${preventedSize} preventions, all element states`, 'info');
     }
 
     /**
@@ -696,7 +713,9 @@
         pageLoadId: this.pageLoadId,
         executedActionsThisLoad: this.pageLoadActionCache.size,
         totalExecutedActions: this.executedActions.size,
-        activeModals: this.activeModals.size
+        activeModals: this.activeModals.size,
+        preventedActions: this.preventedActions.size,
+        elementStates: Object.fromEntries(this.elementStateCache)
       };
     }
 
@@ -1150,6 +1169,24 @@
         return { success: false, reason: 'already_executed_this_page_load' };
       }
       
+      // NEW: Additional protection for Show Element actions
+      if (name === 'Show Element') {
+        const preventKey = `show-${config.selector}`;
+        if (this.preventedActions.has(preventKey)) {
+          this.log(`🚫 BLOCKED: Show action prevented for already visible element: ${config.selector}`, 'warning');
+          return { success: false, reason: 'show_action_prevented' };
+        }
+        
+        // Check if element is currently visible
+        if (this.isElementVisible(config.selector)) {
+          this.log(`🚫 BLOCKED: Element is currently visible, preventing show: ${config.selector}`, 'warning');
+          // Mark as prevented to block future attempts
+          this.preventedActions.add(preventKey);
+          this.elementStateCache.set(config.selector, 'visible');
+          return { success: false, reason: 'element_already_visible' };
+        }
+      }
+      
       // For certain actions, enforce one-time execution per page load
       const oneTimeActions = ['Show Element', 'Hide Element', 'Modify CSS', 'Add Class', 'Remove Class'];
       if (oneTimeActions.includes(name)) {
@@ -1568,9 +1605,14 @@
           
           // NEW: Clean up modal state tracking when hiding elements
           this.activeModals.delete(config.selector);
+          this.elementStateCache.set(config.selector, 'hidden');
+          
+          // Remove show prevention so element can be shown again if needed
+          const preventKey = `show-${config.selector}`;
+          this.preventedActions.delete(preventKey);
           
           this.completedModifications.add(`hideElement:${config.selector}`);
-          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector}) - Removed from active modals tracking`, 'success');
+          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector}) - UNLOCKED for future showing`, 'success');
         };
         
         if (delay > 0) {
@@ -1598,17 +1640,26 @@
           return { success: false, error: 'No elements found' };
         }
         
+        // NEW: Check element state cache first
+        const elementState = this.elementStateCache.get(config.selector);
+        if (elementState === 'visible') {
+          this.log(`🚫 Element marked as visible in state cache, blocking show: ${config.selector}`, 'warning');
+          return { success: false, error: 'Element already marked as visible' };
+        }
+        
         // NEW: Check if modal is already visible to prevent re-showing
         if (this.isElementVisible(config.selector)) {
-          this.log(`⚠️ Element already visible, skipping show action: ${config.selector}`, 'warning');
+          this.log(`🚫 Element already visible, blocking show action: ${config.selector}`, 'warning');
+          // Update state cache
+          this.elementStateCache.set(config.selector, 'visible');
           return { success: false, error: 'Element already visible' };
         }
         
         // NEW: Check recent show history to prevent rapid re-showing
         const now = Date.now();
         const lastShown = this.modalShowHistory.get(config.selector);
-        if (lastShown && (now - lastShown) < 3000) { // 3 second cooldown
-          this.log(`⚠️ Element was recently shown, skipping to prevent loop: ${config.selector}`, 'warning');
+        if (lastShown && (now - lastShown) < 10000) { // Increased to 10 second cooldown
+          this.log(`🚫 Element was recently shown, blocking to prevent loop: ${config.selector}`, 'warning');
           return { success: false, error: 'Element recently shown' };
         }
         
@@ -1625,12 +1676,17 @@
             }
           });
           
-          // NEW: Track modal state
+          // NEW: Track modal state comprehensively
           this.activeModals.add(config.selector);
           this.modalShowHistory.set(config.selector, now);
+          this.elementStateCache.set(config.selector, 'visible');
+          
+          // Prevent any future show actions for this element until explicitly reset
+          const preventKey = `show-${config.selector}`;
+          this.preventedActions.add(preventKey);
           
           this.completedModifications.add(`showElement:${config.selector}`);
-          this.log(`✅ Shown ${elements.length} elements (${config.selector}) - Added to active modals tracking`);
+          this.log(`✅ Shown ${elements.length} elements (${config.selector}) - LOCKED against re-showing`);
         };
         
         if (delay > 0) {
