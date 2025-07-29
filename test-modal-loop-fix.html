@@ -124,11 +124,11 @@
         <div>
             <h4>Expected Behavior:</h4>
             <ul style="font-size: 14px; margin: 10px 0;">
-                <li>✅ First click shows modal</li>
-                <li>✅ Close button works without loop</li>
-                <li>🔒 Once closed by user, modal NEVER shows again (any page interaction)</li>
-                <li>📊 Check stats to see "user-closed elements"</li>
-                <li>🔄 Use "Reset Page Cache" to clear user choices</li>
+                <li>✅ First click triggers workflow node once</li>
+                <li>✅ Modal shows once, close button works</li>
+                <li>🔒 Node NEVER executes again (any page interaction)</li>
+                <li>📊 Check stats to see "executed nodes"</li>
+                <li>🔄 Use "Reset Page Cache" to clear node execution history</li>
             </ul>
         </div>
         
@@ -273,7 +273,7 @@
         document.getElementById('reset-cache').addEventListener('click', () => {
             if (window.workflowSystem && window.workflowSystem.resetPageLoadCache) {
                 window.workflowSystem.resetPageLoadCache();
-                addLog('🔄 Shown elements cleared - modals can show again');
+                addLog('🔄 Executed nodes cleared - workflows can run again');
             } else {
                 addLog('❌ Workflow system not ready');
             }
@@ -284,8 +284,7 @@
             if (window.workflowSystem && window.workflowSystem.getExecutionStats) {
                 const stats = window.workflowSystem.getExecutionStats();
                 addLog(`📊 Execution Stats:`);
-                addLog(`   - Shown elements: [${stats.shownElements.join(', ') || 'none'}]`);
-                addLog(`   - User-closed elements: [${stats.userClosedElements.join(', ') || 'none'}]`);
+                addLog(`   - Executed nodes: [${stats.executedNodes.join(', ') || 'none'}]`);
                 addLog(`   - Total actions: ${stats.totalExecutedActions}`);
             } else {
                 addLog('❌ Workflow system not ready');

@@ -30,9 +30,8 @@
       this.triggeredWorkflows = new Map(); // Cache triggered workflows to prevent re-triggering
       this.processingWorkflows = false; // Flag to prevent recursive processWorkflows calls
       
-      // SIMPLE: Track which elements have been shown this page load
-      this.shownElements = new Set(); // Track elements that have been shown
-      this.userClosedElements = new Set(); // Track elements closed by user - NEVER show again
+      // SIMPLE: Track which workflow nodes have already executed this page load
+      this.executedNodes = new Set(); // Track nodes that have already run - NEVER run again
       this.geolocationData = null; // Initialize geolocation data
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
@@ -556,23 +555,8 @@
           const dismissKey = `dismiss-${selector}-${Date.now()}`;
           this.dismissClickCache.add(dismissKey);
           
-          // CRITICAL: Mark elements as user-closed when close buttons are clicked
+          // Clean up dismiss cache
           setTimeout(() => {
-            this.log(`🧹 Cleanup check: Looking for closed elements...`, 'info');
-            this.log(`   - Currently shown: [${Array.from(this.shownElements).join(', ')}]`, 'info');
-            
-            // Check all shown elements and mark closed ones as user-closed
-            for (const selector of this.shownElements) {
-              const isVisible = this.isElementVisible(selector);
-              this.log(`   - Checking ${selector}: visible = ${isVisible}`, 'info');
-              
-              if (!isVisible) {
-                this.shownElements.delete(selector);
-                this.userClosedElements.add(selector); // PERMANENTLY BLOCK
-                this.log(`🔒 Element closed by user - PERMANENTLY BLOCKED: ${selector}`, 'info');
-              }
-            }
-            // Clean up dismiss cache
             this.dismissClickCache.delete(dismissKey);
           }, 1000);
           
@@ -686,14 +670,12 @@
     }
 
     /**
-     * Reset shown elements (for testing or page navigation)
+     * Reset executed nodes (for testing or page navigation)
      */
     resetPageLoadCache() {
-      const shownSize = this.shownElements.size;
-      const closedSize = this.userClosedElements.size;
-      this.shownElements.clear();
-      this.userClosedElements.clear();
-      this.log(`🔄 Reset: Cleared ${shownSize} shown, ${closedSize} user-closed elements`, 'info');
+      const nodeSize = this.executedNodes.size;
+      this.executedNodes.clear();
+      this.log(`🔄 Reset: Cleared ${nodeSize} executed nodes`, 'info');
     }
 
     /**
@@ -701,8 +683,7 @@
      */
     getExecutionStats() {
       return {
-        shownElements: Array.from(this.shownElements),
-        userClosedElements: Array.from(this.userClosedElements),
+        executedNodes: Array.from(this.executedNodes),
         totalExecutedActions: this.executedActions.size
       };
     }
@@ -1146,22 +1127,18 @@
      * Execute a single action
      */
     async executeAction(action) {
-      const { config = {}, name } = action;
+      const { config = {}, name, id } = action;
       
-      // SIMPLE: For Show Element, check if user has closed it or already shown
-      if (name === 'Show Element' && config.selector) {
-        this.log(`🔍 Checking Show Element for: ${config.selector}`, 'info');
-        this.log(`   - User closed elements: [${Array.from(this.userClosedElements).join(', ')}]`, 'info');
-        this.log(`   - Shown elements: [${Array.from(this.shownElements).join(', ')}]`, 'info');
-        
-        if (this.userClosedElements.has(config.selector)) {
-          this.log(`🚫 Element was closed by user - BLOCKED: ${config.selector}`, 'warning');
-          return { success: false, reason: 'user_closed' };
-        }
-        if (this.shownElements.has(config.selector)) {
-          this.log(`🚫 Element already shown this session: ${config.selector}`, 'warning');
-          return { success: false, reason: 'already_shown' };
-        }
+      // SIMPLE: Check if this specific node has already executed this page load
+      if (id && this.executedNodes.has(id)) {
+        this.log(`🚫 Node already executed this page load - BLOCKED: ${id} (${name})`, 'warning');
+        return { success: false, reason: 'node_already_executed' };
+      }
+      
+      // Mark this node as executed
+      if (id) {
+        this.executedNodes.add(id);
+        this.log(`🔒 Node marked as executed: ${id} (${name})`, 'info');
       }
       
       this.log(`⚡ Executing: ${name}`, config);
@@ -1566,10 +1543,6 @@
             hiddenCount++;
           });
           
-          // SIMPLE: Remove from shown elements, but keep user-closed status
-          this.shownElements.delete(config.selector);
-          // Note: We DON'T remove from userClosedElements - user choice is permanent
-          
           this.completedModifications.add(`hideElement:${config.selector}`);
           this.log(`✅ Hidden ${hiddenCount} elements (${config.selector})`, 'success');
         };
@@ -1612,11 +1585,8 @@
             }
           });
           
-          // SIMPLE: Mark element as shown
-          this.shownElements.add(config.selector);
-          
           this.completedModifications.add(`showElement:${config.selector}`);
-          this.log(`✅ Shown ${elements.length} elements (${config.selector}) - marked as shown`);
+          this.log(`✅ Shown ${elements.length} elements (${config.selector})`);
         };
         
         if (delay > 0) {
