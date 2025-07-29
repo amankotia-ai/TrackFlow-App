@@ -30,13 +30,9 @@
       this.triggeredWorkflows = new Map(); // Cache triggered workflows to prevent re-triggering
       this.processingWorkflows = false; // Flag to prevent recursive processWorkflows calls
       
-      // NEW: One-time action execution tracking per page load
-      this.pageLoadActionCache = new Set(); // Track actions executed this page load
-      this.pageLoadId = Date.now(); // Unique ID for this page load session
-      
-      // NEW: Element state awareness to prevent re-showing visible elements
-      this.elementStateCache = new Map(); // Track current state of elements
-      this.preventedActions = new Set(); // Track actions that should be prevented
+      // SIMPLE: Track which elements have been shown this page load
+      this.shownElements = new Set(); // Track elements that have been shown
+      this.userClosedElements = new Set(); // Track elements closed by user - NEVER show again
       this.geolocationData = null; // Initialize geolocation data
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
@@ -560,22 +556,17 @@
           const dismissKey = `dismiss-${selector}-${Date.now()}`;
           this.dismissClickCache.add(dismissKey);
           
-          // Clean up modal state tracking for any modals that might be closing
+          // CRITICAL: Mark elements as user-closed when close buttons are clicked
           setTimeout(() => {
-            // Remove from active modals any that are no longer visible
-            for (const modalSelector of this.activeModals) {
-              if (!this.isElementVisible(modalSelector)) {
-                this.activeModals.delete(modalSelector);
-                this.elementStateCache.set(modalSelector, 'hidden');
-                
-                // CRITICAL: Remove show prevention when element is closed
-                const preventKey = `show-${modalSelector}`;
-                this.preventedActions.delete(preventKey);
-                
-                this.log(`🧹 Cleaned up state for closed element: ${modalSelector}`, 'info');
+            // Check all shown elements and mark closed ones as user-closed
+            for (const selector of this.shownElements) {
+              if (!this.isElementVisible(selector)) {
+                this.shownElements.delete(selector);
+                this.userClosedElements.add(selector); // PERMANENTLY BLOCK
+                this.log(`🔒 Element closed by user - PERMANENTLY BLOCKED: ${selector}`, 'info');
               }
             }
-            // Clean up dismiss cache after 5 seconds
+            // Clean up dismiss cache
             this.dismissClickCache.delete(dismissKey);
           }, 1000);
           
@@ -689,33 +680,24 @@
     }
 
     /**
-     * Reset page load action cache (for testing or page navigation)
+     * Reset shown elements (for testing or page navigation)
      */
     resetPageLoadCache() {
-      const previousSize = this.pageLoadActionCache.size;
-      const preventedSize = this.preventedActions.size;
-      
-      this.pageLoadActionCache.clear();
-      this.preventedActions.clear();
-      this.elementStateCache.clear();
-      this.activeModals.clear();
-      this.modalShowHistory.clear();
-      this.pageLoadId = Date.now();
-      
-      this.log(`🔄 FULL RESET: Cleared ${previousSize} actions, ${preventedSize} preventions, all element states`, 'info');
+      const shownSize = this.shownElements.size;
+      const closedSize = this.userClosedElements.size;
+      this.shownElements.clear();
+      this.userClosedElements.clear();
+      this.log(`🔄 Reset: Cleared ${shownSize} shown, ${closedSize} user-closed elements`, 'info');
     }
 
     /**
-     * Get current page load execution stats
+     * Get current execution stats
      */
     getExecutionStats() {
       return {
-        pageLoadId: this.pageLoadId,
-        executedActionsThisLoad: this.pageLoadActionCache.size,
-        totalExecutedActions: this.executedActions.size,
-        activeModals: this.activeModals.size,
-        preventedActions: this.preventedActions.size,
-        elementStates: Object.fromEntries(this.elementStateCache)
+        shownElements: Array.from(this.shownElements),
+        userClosedElements: Array.from(this.userClosedElements),
+        totalExecutedActions: this.executedActions.size
       };
     }
 
@@ -1160,46 +1142,17 @@
     async executeAction(action) {
       const { config = {}, name } = action;
       
-      // NEW: Create stable action key for one-time execution per page load
-      const stableActionKey = `${name}-${config.selector || 'no-selector'}-${JSON.stringify(config)}`;
-      
-      // Check if this exact action has already been executed this page load
-      if (this.pageLoadActionCache.has(stableActionKey)) {
-        this.log(`⏭️ Skipping already executed action: ${name} (${config.selector})`, 'warning');
-        return { success: false, reason: 'already_executed_this_page_load' };
-      }
-      
-      // NEW: Additional protection for Show Element actions
-      if (name === 'Show Element') {
-        const preventKey = `show-${config.selector}`;
-        if (this.preventedActions.has(preventKey)) {
-          this.log(`🚫 BLOCKED: Show action prevented for already visible element: ${config.selector}`, 'warning');
-          return { success: false, reason: 'show_action_prevented' };
+      // SIMPLE: For Show Element, check if user has closed it or already shown
+      if (name === 'Show Element' && config.selector) {
+        if (this.userClosedElements.has(config.selector)) {
+          this.log(`🚫 Element was closed by user - BLOCKED: ${config.selector}`, 'warning');
+          return { success: false, reason: 'user_closed' };
         }
-        
-        // Check if element is currently visible
-        if (this.isElementVisible(config.selector)) {
-          this.log(`🚫 BLOCKED: Element is currently visible, preventing show: ${config.selector}`, 'warning');
-          // Mark as prevented to block future attempts
-          this.preventedActions.add(preventKey);
-          this.elementStateCache.set(config.selector, 'visible');
-          return { success: false, reason: 'element_already_visible' };
+        if (this.shownElements.has(config.selector)) {
+          this.log(`🚫 Element already shown this session: ${config.selector}`, 'warning');
+          return { success: false, reason: 'already_shown' };
         }
       }
-      
-      // For certain actions, enforce one-time execution per page load
-      const oneTimeActions = ['Show Element', 'Hide Element', 'Modify CSS', 'Add Class', 'Remove Class'];
-      if (oneTimeActions.includes(name)) {
-        this.pageLoadActionCache.add(stableActionKey);
-        this.log(`🔒 Marked as executed for page load: ${name} (${config.selector})`, 'info');
-      }
-      
-      // Legacy execution tracking (keep for backward compatibility)
-      const actionKey = `${action.id}-${Date.now()}`;
-      if (this.executedActions.has(actionKey)) {
-        return { success: false, reason: 'already_executed' };
-      }
-      this.executedActions.add(actionKey);
       
       this.log(`⚡ Executing: ${name}`, config);
 
@@ -1603,16 +1556,12 @@
             hiddenCount++;
           });
           
-          // NEW: Clean up modal state tracking when hiding elements
-          this.activeModals.delete(config.selector);
-          this.elementStateCache.set(config.selector, 'hidden');
-          
-          // Remove show prevention so element can be shown again if needed
-          const preventKey = `show-${config.selector}`;
-          this.preventedActions.delete(preventKey);
+          // SIMPLE: Remove from shown elements, but keep user-closed status
+          this.shownElements.delete(config.selector);
+          // Note: We DON'T remove from userClosedElements - user choice is permanent
           
           this.completedModifications.add(`hideElement:${config.selector}`);
-          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector}) - UNLOCKED for future showing`, 'success');
+          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector})`, 'success');
         };
         
         if (delay > 0) {
@@ -1640,29 +1589,6 @@
           return { success: false, error: 'No elements found' };
         }
         
-        // NEW: Check element state cache first
-        const elementState = this.elementStateCache.get(config.selector);
-        if (elementState === 'visible') {
-          this.log(`🚫 Element marked as visible in state cache, blocking show: ${config.selector}`, 'warning');
-          return { success: false, error: 'Element already marked as visible' };
-        }
-        
-        // NEW: Check if modal is already visible to prevent re-showing
-        if (this.isElementVisible(config.selector)) {
-          this.log(`🚫 Element already visible, blocking show action: ${config.selector}`, 'warning');
-          // Update state cache
-          this.elementStateCache.set(config.selector, 'visible');
-          return { success: false, error: 'Element already visible' };
-        }
-        
-        // NEW: Check recent show history to prevent rapid re-showing
-        const now = Date.now();
-        const lastShown = this.modalShowHistory.get(config.selector);
-        if (lastShown && (now - lastShown) < 10000) { // Increased to 10 second cooldown
-          this.log(`🚫 Element was recently shown, blocking to prevent loop: ${config.selector}`, 'warning');
-          return { success: false, error: 'Element recently shown' };
-        }
-        
         // Apply delay if specified (non-blocking)
         const delay = parseInt(config.delay) || 0;
         
@@ -1676,17 +1602,11 @@
             }
           });
           
-          // NEW: Track modal state comprehensively
-          this.activeModals.add(config.selector);
-          this.modalShowHistory.set(config.selector, now);
-          this.elementStateCache.set(config.selector, 'visible');
-          
-          // Prevent any future show actions for this element until explicitly reset
-          const preventKey = `show-${config.selector}`;
-          this.preventedActions.add(preventKey);
+          // SIMPLE: Mark element as shown
+          this.shownElements.add(config.selector);
           
           this.completedModifications.add(`showElement:${config.selector}`);
-          this.log(`✅ Shown ${elements.length} elements (${config.selector}) - LOCKED against re-showing`);
+          this.log(`✅ Shown ${elements.length} elements (${config.selector}) - marked as shown`);
         };
         
         if (delay > 0) {

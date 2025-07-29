@@ -126,8 +126,9 @@
             <ul style="font-size: 14px; margin: 10px 0;">
                 <li>✅ First click shows modal</li>
                 <li>✅ Close button works without loop</li>
-                <li>✅ Subsequent clicks are ignored (shows "already executed" message)</li>
-                <li>✅ Use "Reset Page Cache" to allow actions to execute again</li>
+                <li>🔒 Once closed by user, modal NEVER shows again (any page interaction)</li>
+                <li>📊 Check stats to see "user-closed elements"</li>
+                <li>🔄 Use "Reset Page Cache" to clear user choices</li>
             </ul>
         </div>
         
@@ -272,7 +273,7 @@
         document.getElementById('reset-cache').addEventListener('click', () => {
             if (window.workflowSystem && window.workflowSystem.resetPageLoadCache) {
                 window.workflowSystem.resetPageLoadCache();
-                addLog('🔄 Page load cache reset - actions can execute again');
+                addLog('🔄 Shown elements cleared - modals can show again');
             } else {
                 addLog('❌ Workflow system not ready');
             }
@@ -283,12 +284,9 @@
             if (window.workflowSystem && window.workflowSystem.getExecutionStats) {
                 const stats = window.workflowSystem.getExecutionStats();
                 addLog(`📊 Execution Stats:`);
-                addLog(`   - Page Load ID: ${stats.pageLoadId}`);
-                addLog(`   - Actions executed this load: ${stats.executedActionsThisLoad}`);
+                addLog(`   - Shown elements: [${stats.shownElements.join(', ') || 'none'}]`);
+                addLog(`   - User-closed elements: [${stats.userClosedElements.join(', ') || 'none'}]`);
                 addLog(`   - Total actions: ${stats.totalExecutedActions}`);
-                addLog(`   - Active modals: ${stats.activeModals}`);
-                addLog(`   - Prevented actions: ${stats.preventedActions}`);
-                addLog(`   - Element states: ${JSON.stringify(stats.elementStates)}`);
             } else {
                 addLog('❌ Workflow system not ready');
             }
