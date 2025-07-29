@@ -81,6 +81,7 @@
         <button onclick="showElementInstant()">Show Element (instant)</button>
         <button onclick="modifyCSSWithDelay()">Modify CSS (with delay)</button>
         <button onclick="modifyCSSInstant()">Modify CSS (instant)</button>
+        <button onclick="testNonBlockingBehavior()">Test Non-Blocking Delays</button>
         <button onclick="clearLog()">Clear Log</button>
     </div>
     
@@ -197,6 +198,41 @@
             
             const result = await workflowSystem.modifyCSS(config);
             log(`✅ Instant CSS modification completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+        }
+
+        async function testNonBlockingBehavior() {
+            log('🚀 Testing non-blocking delay behavior...');
+            log('This test will demonstrate that delays don\'t block other operations');
+            
+            // Schedule multiple operations with different delays
+            log('📅 Scheduling: Hide (5000ms delay), Show (1000ms delay), CSS (instant)');
+            
+            // This should execute after 5 seconds
+            const hideResult = await workflowSystem.hideElement({
+                selector: '#testElement',
+                animation: 'fade',
+                delay: 5000
+            });
+            log(`✅ Hide scheduled: ${hideResult.scheduled ? 'YES' : 'NO'} (${hideResult.delay}ms)`);
+            
+            // This should execute after 1 second  
+            const showResult = await workflowSystem.showElement({
+                selector: '#testElement',
+                animation: 'fade',
+                delay: 1000
+            });
+            log(`✅ Show scheduled: ${showResult.scheduled ? 'YES' : 'NO'} (${showResult.delay}ms)`);
+            
+            // This should execute immediately
+            const cssResult = await workflowSystem.modifyCSS({
+                selector: '#testElement',
+                property: 'border',
+                value: '3px solid #ff6b6b',
+                delay: 0
+            });
+            log(`✅ CSS executed: ${cssResult.scheduled ? 'SCHEDULED' : 'IMMEDIATE'}`);
+            
+            log('⏰ Watch the element: CSS change (now) → Show (1s) → Hide (5s)');
         }
 
         function clearLog() {

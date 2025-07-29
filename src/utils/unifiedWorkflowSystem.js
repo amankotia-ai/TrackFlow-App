@@ -1354,32 +1354,38 @@
           return { success: false, error: 'No elements found' };
         }
         
-        // Apply delay if specified
+        // Apply delay if specified (non-blocking)
         const delay = parseInt(config.delay) || 0;
-        if (delay > 0) {
-          this.log(`⏰ Delaying hide element execution by ${delay}ms`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
         
-        let hiddenCount = 0;
-        elements.forEach(element => {
-          if (config.animation === 'fade') {
-            element.style.transition = 'opacity 0.3s ease';
-            element.style.opacity = '0';
-            setTimeout(() => {
+        const executeHide = () => {
+          let hiddenCount = 0;
+          elements.forEach(element => {
+            if (config.animation === 'fade') {
+              element.style.transition = 'opacity 0.3s ease';
+              element.style.opacity = '0';
+              setTimeout(() => {
+                element.style.display = 'none';
+                this.log(`🫥 Element faded out: ${element.tagName}.${element.className}`);
+              }, 300);
+            } else {
               element.style.display = 'none';
-              this.log(`🫥 Element faded out: ${element.tagName}.${element.className}`);
-            }, 300);
-          } else {
-            element.style.display = 'none';
-            this.log(`🫥 Element hidden: ${element.tagName}.${element.className}`);
-          }
-          hiddenCount++;
-        });
+              this.log(`🫥 Element hidden: ${element.tagName}.${element.className}`);
+            }
+            hiddenCount++;
+          });
+          
+          this.completedModifications.add(`hideElement:${config.selector}`);
+          this.log(`✅ Hidden ${hiddenCount} elements (${config.selector})`, 'success');
+        };
         
-        this.completedModifications.add(`hideElement:${config.selector}`);
-        this.log(`✅ Hidden ${hiddenCount} elements (${config.selector})`, 'success');
-        return { success: true, hidden: hiddenCount };
+        if (delay > 0) {
+          this.log(`⏰ Scheduling hide element execution in ${delay}ms (non-blocking)`);
+          setTimeout(executeHide, delay);
+          return { success: true, scheduled: true, delay: delay, elements: elements.length };
+        } else {
+          executeHide();
+          return { success: true, hidden: elements.length };
+        }
         
       } catch (error) {
         this.log(`❌ Hide element failed for ${config.selector}: ${error.message}`, 'error');
@@ -1397,25 +1403,31 @@
           return { success: false, error: 'No elements found' };
         }
         
-        // Apply delay if specified
+        // Apply delay if specified (non-blocking)
         const delay = parseInt(config.delay) || 0;
+        
+        const executeShow = () => {
+          elements.forEach(element => {
+            element.style.display = 'block';
+            if (config.animation === 'fade') {
+              element.style.opacity = '0';
+              element.style.transition = 'opacity 0.3s ease';
+              setTimeout(() => element.style.opacity = '1', 10);
+            }
+          });
+          
+          this.completedModifications.add(`showElement:${config.selector}`);
+          this.log(`✅ Shown ${elements.length} elements (${config.selector})`);
+        };
+        
         if (delay > 0) {
-          this.log(`⏰ Delaying show element execution by ${delay}ms`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          this.log(`⏰ Scheduling show element execution in ${delay}ms (non-blocking)`);
+          setTimeout(executeShow, delay);
+          return { success: true, scheduled: true, delay: delay, elements: elements.length };
+        } else {
+          executeShow();
+          return { success: true, shown: elements.length };
         }
-        
-        elements.forEach(element => {
-          element.style.display = 'block';
-          if (config.animation === 'fade') {
-            element.style.opacity = '0';
-            element.style.transition = 'opacity 0.3s ease';
-            setTimeout(() => element.style.opacity = '1', 10);
-          }
-        });
-        
-        this.completedModifications.add(`showElement:${config.selector}`);
-        this.log(`✅ Shown ${elements.length} elements (${config.selector})`);
-        return { success: true, shown: elements.length };
         
       } catch (error) {
         this.log(`❌ Show element failed for ${config.selector}: ${error.message}`, 'error');
@@ -1433,21 +1445,27 @@
           return { success: false, error: 'No elements found' };
         }
         
-        // Apply delay if specified
+        // Apply delay if specified (non-blocking)
         const delay = parseInt(config.delay) || 0;
+        
+        const executeCSS = () => {
+          const property = config.customProperty || config.property;
+          elements.forEach(element => {
+            element.style[property] = config.value;
+          });
+          
+          this.completedModifications.add(`modifyCSS:${config.selector}`);
+          this.log(`✅ Modified CSS for ${elements.length} elements (${config.selector}): ${property} = ${config.value}`);
+        };
+        
         if (delay > 0) {
-          this.log(`⏰ Delaying CSS modification execution by ${delay}ms`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          this.log(`⏰ Scheduling CSS modification execution in ${delay}ms (non-blocking)`);
+          setTimeout(executeCSS, delay);
+          return { success: true, scheduled: true, delay: delay, elements: elements.length };
+        } else {
+          executeCSS();
+          return { success: true, modified: elements.length };
         }
-        
-        const property = config.customProperty || config.property;
-        elements.forEach(element => {
-          element.style[property] = config.value;
-        });
-        
-        this.completedModifications.add(`modifyCSS:${config.selector}`);
-        this.log(`✅ Modified CSS for ${elements.length} elements (${config.selector}): ${property} = ${config.value}`);
-        return { success: true, modified: elements.length };
         
       } catch (error) {
         this.log(`❌ CSS modification failed for ${config.selector}: ${error.message}`, 'error');

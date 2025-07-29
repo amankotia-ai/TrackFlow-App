@@ -486,89 +486,107 @@
     async executeHideElement(config) {
       await this.waitForElement(config.selector);
       
-      // Apply delay if specified
+      const elements = document.querySelectorAll(config.selector);
+      
+      // Apply delay if specified (non-blocking)
       const delay = parseInt(config.delay) || 0;
+      
+      const executeHide = () => {
+        elements.forEach(element => {
+          if (config.animation === 'fade') {
+            element.style.transition = 'opacity 0.3s ease';
+            element.style.opacity = '0';
+            setTimeout(() => {
+              element.style.display = 'none';
+            }, 300);
+          } else if (config.animation === 'slide') {
+            element.style.transition = 'transform 0.3s ease';
+            element.style.transform = 'translateY(-100%)';
+            setTimeout(() => {
+              element.style.display = 'none';
+            }, 300);
+          } else {
+            element.style.display = 'none';
+          }
+        });
+        
+        this.logActionExecution('Hide Element', config.selector);
+      };
+      
       if (delay > 0) {
         if (this.config.debug) {
-          console.log(`⏰ Delaying hide element execution by ${delay}ms`);
+          console.log(`⏰ Scheduling hide element execution in ${delay}ms (non-blocking)`);
         }
-        await new Promise(resolve => setTimeout(resolve, delay));
+        setTimeout(executeHide, delay);
+      } else {
+        executeHide();
       }
-      
-      const elements = document.querySelectorAll(config.selector);
-      elements.forEach(element => {
-        if (config.animation === 'fade') {
-          element.style.transition = 'opacity 0.3s ease';
-          element.style.opacity = '0';
-          setTimeout(() => {
-            element.style.display = 'none';
-          }, 300);
-        } else if (config.animation === 'slide') {
-          element.style.transition = 'transform 0.3s ease';
-          element.style.transform = 'translateY(-100%)';
-          setTimeout(() => {
-            element.style.display = 'none';
-          }, 300);
-        } else {
-          element.style.display = 'none';
-        }
-      });
-      
-      this.logActionExecution('Hide Element', config.selector);
     }
 
     async executeShowElement(config) {
-      // Apply delay if specified
+      const elements = document.querySelectorAll(config.selector);
+      
+      // Apply delay if specified (non-blocking)
       const delay = parseInt(config.delay) || 0;
+      
+      const executeShow = () => {
+        elements.forEach(element => {
+          element.style.display = '';
+          
+          if (config.animation === 'fade') {
+            element.style.opacity = '0';
+            element.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => {
+              element.style.opacity = '1';
+            }, 10);
+          } else if (config.animation === 'slide') {
+            element.style.transform = 'translateY(-100%)';
+            element.style.transition = 'transform 0.3s ease';
+            setTimeout(() => {
+              element.style.transform = 'translateY(0)';
+            }, 10);
+          }
+        });
+        
+        this.logActionExecution('Show Element', config.selector);
+      };
+      
       if (delay > 0) {
         if (this.config.debug) {
-          console.log(`⏰ Delaying show element execution by ${delay}ms`);
+          console.log(`⏰ Scheduling show element execution in ${delay}ms (non-blocking)`);
         }
-        await new Promise(resolve => setTimeout(resolve, delay));
+        setTimeout(executeShow, delay);
+      } else {
+        executeShow();
       }
-      
-      const elements = document.querySelectorAll(config.selector);
-      elements.forEach(element => {
-        element.style.display = '';
-        
-        if (config.animation === 'fade') {
-          element.style.opacity = '0';
-          element.style.transition = 'opacity 0.3s ease';
-          setTimeout(() => {
-            element.style.opacity = '1';
-          }, 10);
-        } else if (config.animation === 'slide') {
-          element.style.transform = 'translateY(-100%)';
-          element.style.transition = 'transform 0.3s ease';
-          setTimeout(() => {
-            element.style.transform = 'translateY(0)';
-          }, 10);
-        }
-      });
-      
-      this.logActionExecution('Show Element', config.selector);
     }
 
     async executeModifyCSS(config) {
       await this.waitForElement(config.selector);
       
-      // Apply delay if specified
+      const elements = document.querySelectorAll(config.selector);
+      
+      // Apply delay if specified (non-blocking)
       const delay = parseInt(config.delay) || 0;
+      
+      const executeCSS = () => {
+        const property = config.customProperty || config.property;
+        
+        elements.forEach(element => {
+          element.style[property] = config.value;
+        });
+        
+        this.logActionExecution('Modify CSS', config.selector, `${property}: ${config.value}`);
+      };
+      
       if (delay > 0) {
         if (this.config.debug) {
-          console.log(`⏰ Delaying CSS modification execution by ${delay}ms`);
+          console.log(`⏰ Scheduling CSS modification execution in ${delay}ms (non-blocking)`);
         }
-        await new Promise(resolve => setTimeout(resolve, delay));
+        setTimeout(executeCSS, delay);
+      } else {
+        executeCSS();
       }
-      
-      const elements = document.querySelectorAll(config.selector);
-      const property = config.customProperty || config.property;
-      
-      elements.forEach(element => {
-        element.style[property] = config.value;
-      });
-      
-      this.logActionExecution('Modify CSS', config.selector, `${property}: ${config.value}`);
     }
 
     async executeAddClass(config) {
