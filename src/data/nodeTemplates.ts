@@ -647,6 +647,54 @@ export const nodeTemplates: NodeTemplate[] = [
     ]
   },
   {
+    id: 'image-replacement-action',
+    type: 'action',
+    category: 'Content Modification',
+    name: 'Replace Image',
+    description: 'Replace image source in selected img elements',
+    icon: 'Image',
+    defaultConfig: {
+      selector: '',
+      newImageUrl: '',
+      originalImageUrl: '',
+      altText: ''
+    },
+    configFields: [
+      { 
+        key: 'selector', 
+        type: 'css-selector', 
+        label: 'CSS Selector', 
+        required: true, 
+        placeholder: 'img, .hero-image, #main-banner',
+        description: 'CSS selector for target image element(s)'
+      },
+      { 
+        key: 'newImageUrl', 
+        type: 'url', 
+        label: 'New Image URL', 
+        required: true, 
+        placeholder: 'https://example.com/new-image.jpg',
+        description: 'URL of the new image to display'
+      },
+      { 
+        key: 'originalImageUrl', 
+        type: 'text', 
+        label: 'Original Image URL (Optional)', 
+        required: false, 
+        placeholder: 'current-image.jpg',
+        description: 'Part of the original image URL to match (helps target specific images when multiple matches exist)'
+      },
+      { 
+        key: 'altText', 
+        type: 'text', 
+        label: 'Alt Text (Optional)', 
+        required: false, 
+        placeholder: 'Descriptive alt text',
+        description: 'New alt text for the image (for accessibility)'
+      }
+    ]
+  },
+  {
     id: 'hide-element-action',
     type: 'action',
     category: 'Content Modification',

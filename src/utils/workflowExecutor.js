@@ -220,7 +220,7 @@
       }
       
       // For certain actions, enforce one-time execution per page load
-      const oneTimeActions = ['Show Element', 'Hide Element', 'Modify CSS', 'Add Class', 'Remove Class'];
+      const oneTimeActions = ['Show Element', 'Hide Element', 'Modify CSS', 'Add Class', 'Remove Class', 'Replace Image'];
       if (oneTimeActions.includes(name)) {
         this.pageLoadActionCache.add(stableActionKey);
         if (this.config.debug) {
@@ -243,6 +243,10 @@
         switch (standardizedAction.name) {
           case 'Replace Text':
             await this.executeReplaceText(standardizedAction.config);
+            break;
+          
+          case 'Replace Image':
+            await this.executeReplaceImage(standardizedAction.config);
             break;
           
           case 'Hide Element':
@@ -454,6 +458,95 @@
       }
       
       this.logActionExecution('Replace Text', config.selector, `Text changed in ${successCount}/${elements.length} elements to: ${config.newText}`);
+    }
+
+    async executeReplaceImage(config) {
+      await this.waitForElement(config.selector);
+      
+      const elements = document.querySelectorAll(config.selector);
+      if (!elements?.length) {
+        console.warn(`🎯 No elements found for selector: ${config.selector}`);
+        return;
+      }
+      
+      let successCount = 0;
+      
+      // For image replacement, apply smart targeting to avoid replacing images in multiple identical elements
+      if (elements.length > 1) {
+        console.log(`🎯 Image replacement detected with ${elements.length} matching elements. Applying smart targeting...`);
+        
+        // Try to find the most specific element to replace
+        let targetElement = null;
+        
+        // Strategy 1: If originalImageUrl is provided, find the image element containing that URL
+        if (config.originalImageUrl) {
+          for (const element of elements) {
+            const currentSrc = element.src || element.getAttribute('src') || '';
+            if (currentSrc.includes(config.originalImageUrl)) {
+              targetElement = element;
+              console.log(`🎯 Found image with original URL: "${config.originalImageUrl}"`);
+              break;
+            }
+          }
+        }
+        
+        // Strategy 2: If no originalImageUrl match, use the first element
+        if (!targetElement) {
+          targetElement = elements[0];
+          console.log(`🎯 Using first matching element for image replacement`);
+        }
+        
+        // Apply replacement to only the targeted element
+        if (this.replaceImageRobust(targetElement, config)) {
+          successCount = 1;
+        }
+      } else {
+        // Single element match - proceed as normal
+        elements.forEach(element => {
+          if (this.replaceImageRobust(element, config)) {
+            successCount++;
+          }
+        });
+      }
+      
+      this.logActionExecution('Replace Image', config.selector, `Image changed in ${successCount}/${elements.length} elements to: ${config.newImageUrl}`);
+    }
+
+    /**
+     * Robust image replacement
+     */
+    replaceImageRobust(element, config) {
+      if (!element || !config.newImageUrl) return false;
+      
+      try {
+        const tagName = element.tagName.toLowerCase();
+        const newImageUrl = config.newImageUrl;
+        const altText = config.altText;
+        
+        // Handle img elements
+        if (tagName === 'img') {
+          element.src = newImageUrl;
+          if (altText) {
+            element.alt = altText;
+          }
+        }
+        // Handle elements with background images
+        else {
+          element.style.backgroundImage = `url("${newImageUrl}")`;
+          // Ensure background-size and background-position are set for better display
+          if (!element.style.backgroundSize) {
+            element.style.backgroundSize = 'cover';
+          }
+          if (!element.style.backgroundPosition) {
+            element.style.backgroundPosition = 'center';
+          }
+        }
+        
+        return true;
+      } catch (e) {
+        console.error('🎯 Error replacing image:', e);
+        return false;
+      }
     }
 
     /**

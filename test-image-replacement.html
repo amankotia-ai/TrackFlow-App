@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Replacement Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        .test-image {
+            width: 200px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            display: block;
+            margin: 20px auto;
+        }
+        
+        .background-image-element {
+            width: 200px;
+            height: 150px;
+            background-image: url('https://via.placeholder.com/200x150/ff6b6b/ffffff?text=Original+BG');
+            background-size: cover;
+            background-position: center;
+            border-radius: 8px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .trigger-button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        
+        .trigger-button:hover {
+            background: #2980b9;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Replacement Node Test</h1>
+        
+        <div class="test-section">
+            <h3>Test 1: Replace IMG Element</h3>
+            <p>This tests replacing the src of an &lt;img&gt; element</p>
+            <img id="test-image-1" class="test-image" 
+                 src="https://via.placeholder.com/200x150/3498db/ffffff?text=Original+Image" 
+                 alt="Original test image">
+            <button class="trigger-button" onclick="testImageReplacement()">
+                Replace Image
+            </button>
+            <div id="status-1" class="status" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test 2: Replace Background Image</h3>
+            <p>This tests replacing the background-image CSS property</p>
+            <div id="test-bg-1" class="background-image-element">
+                Background Image
+            </div>
+            <button class="trigger-button" onclick="testBackgroundReplacement()">
+                Replace Background
+            </button>
+            <div id="status-2" class="status" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test 3: Smart Targeting with Original URL</h3>
+            <p>This tests smart targeting using the original image URL</p>
+            <img class="test-image" src="https://via.placeholder.com/200x150/e74c3c/ffffff?text=Image+1" alt="Image 1">
+            <img id="target-image" class="test-image" src="https://via.placeholder.com/200x150/2ecc71/ffffff?text=Target+Image" alt="Target Image">
+            <img class="test-image" src="https://via.placeholder.com/200x150/f39c12/ffffff?text=Image+3" alt="Image 3">
+            <button class="trigger-button" onclick="testSmartTargeting()">
+                Replace Target Image Only
+            </button>
+            <div id="status-3" class="status" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Load the workflow system -->
+    <script src="src/utils/unifiedWorkflowSystem.js"></script>
+    
+    <script>
+        // Initialize the workflow system
+        let workflowSystem;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            workflowSystem = new UnifiedWorkflowSystem({
+                debug: true
+            });
+            console.log('🎯 Workflow system initialized for image replacement testing');
+        });
+        
+        // Test 1: Basic image replacement
+        async function testImageReplacement() {
+            const status = document.getElementById('status-1');
+            status.style.display = 'block';
+            status.className = 'status warning';
+            status.textContent = 'Testing image replacement...';
+            
+            const action = {
+                id: 'test-image-replace-1',
+                name: 'Replace Image',
+                config: {
+                    selector: '#test-image-1',
+                    newImageUrl: 'https://via.placeholder.com/200x150/e74c3c/ffffff?text=Replaced+Image',
+                    altText: 'Replaced test image'
+                }
+            };
+            
+            try {
+                const result = await workflowSystem.executeAction(action);
+                if (result.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Image replacement successful!';
+                } else {
+                    status.className = 'status warning';
+                    status.textContent = `Image replacement failed: ${result.error}`;
+                }
+            } catch (error) {
+                status.className = 'status warning';
+                status.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        // Test 2: Background image replacement
+        async function testBackgroundReplacement() {
+            const status = document.getElementById('status-2');
+            status.style.display = 'block';
+            status.className = 'status warning';
+            status.textContent = 'Testing background image replacement...';
+            
+            const action = {
+                id: 'test-bg-replace-1',
+                name: 'Replace Image',
+                config: {
+                    selector: '#test-bg-1',
+                    newImageUrl: 'https://via.placeholder.com/200x150/9b59b6/ffffff?text=New+Background'
+                }
+            };
+            
+            try {
+                const result = await workflowSystem.executeAction(action);
+                if (result.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Background image replacement successful!';
+                } else {
+                    status.className = 'status warning';
+                    status.textContent = `Background replacement failed: ${result.error}`;
+                }
+            } catch (error) {
+                status.className = 'status warning';
+                status.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        // Test 3: Smart targeting with original URL
+        async function testSmartTargeting() {
+            const status = document.getElementById('status-3');
+            status.style.display = 'block';
+            status.className = 'status warning';
+            status.textContent = 'Testing smart targeting...';
+            
+            const action = {
+                id: 'test-smart-targeting-1',
+                name: 'Replace Image',
+                config: {
+                    selector: '.test-image',
+                    newImageUrl: 'https://via.placeholder.com/200x150/8e44ad/ffffff?text=Smart+Replace',
+                    originalImageUrl: '2ecc71', // Part of the target image URL
+                    altText: 'Smart targeted replacement'
+                }
+            };
+            
+            try {
+                const result = await workflowSystem.executeAction(action);
+                if (result.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Smart targeting successful! Only the target image should be replaced.';
+                } else {
+                    status.className = 'status warning';
+                    status.textContent = `Smart targeting failed: ${result.error}`;
+                }
+            } catch (error) {
+                status.className = 'status warning';
+                status.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html> 

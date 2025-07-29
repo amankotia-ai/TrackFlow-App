@@ -1158,6 +1158,10 @@
             result = await this.replaceText(config);
             break;
             
+          case 'Replace Image':
+            result = await this.replaceImage(config);
+            break;
+            
           case 'Hide Element':
             result = await this.hideElement(config);
             break;
@@ -1224,6 +1228,111 @@
       } catch (error) {
         this.log(`❌ Text replacement failed for ${config.selector}: ${error.message}`, 'error');
         return { success: false, error: error.message };
+      }
+    }
+
+    async replaceImage(config) {
+      try {
+        // Wait for elements to be available
+        await this.waitForElement(config.selector);
+        
+        const elements = document.querySelectorAll(config.selector);
+        if (!elements?.length) {
+          this.log(`⚠️ No elements found for image replacement: ${config.selector}`, 'warning');
+          return { success: false, error: 'No elements found' };
+        }
+        
+        let successCount = 0;
+        
+        // For image replacement, apply smart targeting to avoid replacing images in multiple identical elements
+        if (elements.length > 1) {
+          this.log(`🎯 Image replacement detected with ${elements.length} matching elements. Applying smart targeting...`);
+          
+          // Try to find the most specific element to replace
+          let targetElement = null;
+          
+          // Strategy 1: If originalImageUrl is provided, find the image element containing that URL
+          if (config.originalImageUrl) {
+            for (const element of elements) {
+              const currentSrc = element.src || element.getAttribute('src') || '';
+              if (currentSrc.includes(config.originalImageUrl)) {
+                targetElement = element;
+                this.log(`🎯 Found image with original URL: "${config.originalImageUrl}"`);
+                break;
+              }
+            }
+          }
+          
+          // Strategy 2: If no originalImageUrl match, use the first element
+          if (!targetElement) {
+            targetElement = elements[0];
+            this.log(`🎯 Using first matching element for image replacement`);
+          }
+          
+          // Apply replacement to only the targeted element
+          if (this.replaceImageContent(targetElement, config)) {
+            successCount = 1;
+          }
+        } else {
+          // Single element match - proceed as normal
+          elements.forEach(element => {
+            if (this.replaceImageContent(element, config)) {
+              successCount++;
+            }
+          });
+        }
+        
+        if (successCount > 0) {
+          this.completedModifications.add(`replaceImage:${config.selector}`);
+          this.log(`✅ Image replaced successfully in ${successCount}/${elements.length} elements (${config.selector})`, 'success');
+          return { success: true, replaced: successCount };
+        } else {
+          this.log(`⚠️ Image replacement failed (${config.selector})`, 'warning');
+          return { success: false, error: 'Image replacement failed' };
+        }
+        
+      } catch (error) {
+        this.log(`❌ Image replacement failed for ${config.selector}: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+      }
+    }
+
+    /**
+     * Replace image content in an element
+     */
+    replaceImageContent(element, config) {
+      if (!element || !config.newImageUrl) return false;
+      
+      try {
+        const tagName = element.tagName.toLowerCase();
+        const newImageUrl = config.newImageUrl;
+        const altText = config.altText;
+        
+        this.log(`🔄 Replacing image in ${tagName} element with: ${newImageUrl}`, 'info');
+        
+        // Handle img elements
+        if (tagName === 'img') {
+          element.src = newImageUrl;
+          if (altText) {
+            element.alt = altText;
+          }
+        }
+        // Handle elements with background images
+        else {
+          element.style.backgroundImage = `url("${newImageUrl}")`;
+          // Ensure background-size and background-position are set for better display
+          if (!element.style.backgroundSize) {
+            element.style.backgroundSize = 'cover';
+          }
+          if (!element.style.backgroundPosition) {
+            element.style.backgroundPosition = 'center';
+          }
+        }
+        
+        return true;
+      } catch (e) {
+        this.log(`Error replacing image: ${e.message}`, 'error');
+        return false;
       }
     }
 
