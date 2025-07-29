@@ -1129,17 +1129,24 @@
     async executeAction(action) {
       const { config = {}, name, id } = action;
       
-      // SIMPLE: Check if this specific node has already executed this page load
-      if (id && this.executedNodes.has(id)) {
-        this.log(`🚫 Node already executed this page load - BLOCKED: ${id} (${name})`, 'warning');
-        return { success: false, reason: 'node_already_executed' };
+      // DEBUG: Log the action structure to understand what we're working with
+      this.log(`🔍 DEBUG: Action structure:`, 'info');
+      this.log(`   - id: ${id}`, 'info');
+      this.log(`   - name: ${name}`, 'info');
+      this.log(`   - config: ${JSON.stringify(config)}`, 'info');
+      
+      // SIMPLE: Create a unique key for this action if no ID
+      const actionKey = id || `${name}-${config.selector || 'no-selector'}`;
+      
+      // SIMPLE: Check if this specific action has already executed this page load
+      if (this.executedNodes.has(actionKey)) {
+        this.log(`🚫 Action already executed this page load - BLOCKED: ${actionKey} (${name})`, 'warning');
+        return { success: false, reason: 'action_already_executed' };
       }
       
-      // Mark this node as executed
-      if (id) {
-        this.executedNodes.add(id);
-        this.log(`🔒 Node marked as executed: ${id} (${name})`, 'info');
-      }
+      // Mark this action as executed
+      this.executedNodes.add(actionKey);
+      this.log(`🔒 Action marked as executed: ${actionKey} (${name})`, 'info');
       
       this.log(`⚡ Executing: ${name}`, config);
 
@@ -1785,15 +1792,32 @@
     }
 
     generateSelector(element) {
-      if (element.id) return `#${element.id}`;
-      if (element.className && typeof element.className === 'string') {
-        return `.${element.className.split(' ').join('.')}`;
+      try {
+        if (element.id) return `#${element.id}`;
+        
+        // Handle different types of className
+        let className = '';
+        if (element.className) {
+          if (typeof element.className === 'string') {
+            className = element.className;
+          } else if (element.className.baseVal) {
+            // SVG elements have className.baseVal
+            className = element.className.baseVal;
+          } else if (element.className.animVal) {
+            // Some SVG elements use animVal
+            className = element.className.animVal;
+          }
+        }
+        
+        if (className && className.trim()) {
+          return `.${className.trim().split(' ').filter(c => c).join('.')}`;
+        }
+        
+        return element.tagName ? element.tagName.toLowerCase() : 'unknown';
+      } catch (error) {
+        this.log(`⚠️ Error generating selector: ${error.message}`, 'warning');
+        return 'unknown-element';
       }
-      if (element.className && element.className.baseVal) {
-        // SVG elements have className.baseVal
-        return `.${element.className.baseVal.split(' ').join('.')}`;
-      }
-      return element.tagName.toLowerCase();
     }
 
     async waitForElement(selector, timeout = null) {
