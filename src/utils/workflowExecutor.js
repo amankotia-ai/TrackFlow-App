@@ -486,6 +486,15 @@
     async executeHideElement(config) {
       await this.waitForElement(config.selector);
       
+      // Apply delay if specified
+      const delay = parseInt(config.delay) || 0;
+      if (delay > 0) {
+        if (this.config.debug) {
+          console.log(`⏰ Delaying hide element execution by ${delay}ms`);
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
       const elements = document.querySelectorAll(config.selector);
       elements.forEach(element => {
         if (config.animation === 'fade') {
@@ -509,6 +518,15 @@
     }
 
     async executeShowElement(config) {
+      // Apply delay if specified
+      const delay = parseInt(config.delay) || 0;
+      if (delay > 0) {
+        if (this.config.debug) {
+          console.log(`⏰ Delaying show element execution by ${delay}ms`);
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
       const elements = document.querySelectorAll(config.selector);
       elements.forEach(element => {
         element.style.display = '';
@@ -533,6 +551,15 @@
 
     async executeModifyCSS(config) {
       await this.waitForElement(config.selector);
+      
+      // Apply delay if specified
+      const delay = parseInt(config.delay) || 0;
+      if (delay > 0) {
+        if (this.config.debug) {
+          console.log(`⏰ Delaying CSS modification execution by ${delay}ms`);
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
       
       const elements = document.querySelectorAll(config.selector);
       const property = config.customProperty || config.property;

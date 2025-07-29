@@ -655,7 +655,8 @@ export const nodeTemplates: NodeTemplate[] = [
     icon: 'EyeOff',
     defaultConfig: {
       selector: '',
-      animation: 'fade'
+      animation: 'fade',
+      delay: 0
     },
     configFields: [
       { 
@@ -677,6 +678,14 @@ export const nodeTemplates: NodeTemplate[] = [
           { value: 'slide', label: 'Slide Up' }
         ],
         default: 'fade'
+      },
+      { 
+        key: 'delay', 
+        type: 'number', 
+        label: 'Execution Delay (ms)', 
+        required: false, 
+        default: 0,
+        description: 'Delay in milliseconds before hiding the element (0-10000ms)'
       }
     ]
   },
@@ -689,7 +698,8 @@ export const nodeTemplates: NodeTemplate[] = [
     icon: 'Eye',
     defaultConfig: {
       selector: '',
-      animation: 'fade'
+      animation: 'fade',
+      delay: 0
     },
     configFields: [
       { 
@@ -711,6 +721,14 @@ export const nodeTemplates: NodeTemplate[] = [
           { value: 'slide', label: 'Slide Down' }
         ],
         default: 'fade'
+      },
+      { 
+        key: 'delay', 
+        type: 'number', 
+        label: 'Execution Delay (ms)', 
+        required: false, 
+        default: 0,
+        description: 'Delay in milliseconds before showing the element (0-10000ms)'
       }
     ]
   },
@@ -725,7 +743,8 @@ export const nodeTemplates: NodeTemplate[] = [
       selector: '',
       property: 'background-color',
       value: '',
-      customProperty: ''
+      customProperty: '',
+      delay: 0
     },
     configFields: [
       { 
@@ -780,6 +799,14 @@ export const nodeTemplates: NodeTemplate[] = [
         required: true, 
         placeholder: '#ff0000, 16px, bold, 10px 20px',
         description: 'New value for the CSS property'
+      },
+      { 
+        key: 'delay', 
+        type: 'number', 
+        label: 'Execution Delay (ms)', 
+        required: false, 
+        default: 0,
+        description: 'Delay in milliseconds before applying CSS changes (0-10000ms)'
       }
     ]
   },

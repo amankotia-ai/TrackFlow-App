@@ -1354,6 +1354,13 @@
           return { success: false, error: 'No elements found' };
         }
         
+        // Apply delay if specified
+        const delay = parseInt(config.delay) || 0;
+        if (delay > 0) {
+          this.log(`⏰ Delaying hide element execution by ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
         let hiddenCount = 0;
         elements.forEach(element => {
           if (config.animation === 'fade') {
@@ -1385,6 +1392,18 @@
         await this.waitForElement(config.selector);
         
         const elements = document.querySelectorAll(config.selector);
+        if (!elements?.length) {
+          this.log(`⚠️ No elements found to show: ${config.selector}`, 'warning');
+          return { success: false, error: 'No elements found' };
+        }
+        
+        // Apply delay if specified
+        const delay = parseInt(config.delay) || 0;
+        if (delay > 0) {
+          this.log(`⏰ Delaying show element execution by ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
         elements.forEach(element => {
           element.style.display = 'block';
           if (config.animation === 'fade') {
@@ -1409,12 +1428,25 @@
         await this.waitForElement(config.selector);
         
         const elements = document.querySelectorAll(config.selector);
+        if (!elements?.length) {
+          this.log(`⚠️ No elements found to modify CSS: ${config.selector}`, 'warning');
+          return { success: false, error: 'No elements found' };
+        }
+        
+        // Apply delay if specified
+        const delay = parseInt(config.delay) || 0;
+        if (delay > 0) {
+          this.log(`⏰ Delaying CSS modification execution by ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        const property = config.customProperty || config.property;
         elements.forEach(element => {
-          element.style[config.property] = config.value;
+          element.style[property] = config.value;
         });
         
         this.completedModifications.add(`modifyCSS:${config.selector}`);
-        this.log(`✅ Modified CSS for ${elements.length} elements (${config.selector})`);
+        this.log(`✅ Modified CSS for ${elements.length} elements (${config.selector}): ${property} = ${config.value}`);
         return { success: true, modified: elements.length };
         
       } catch (error) {
