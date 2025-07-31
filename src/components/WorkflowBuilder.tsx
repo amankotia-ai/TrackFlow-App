@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Play, 
@@ -11,7 +11,9 @@ import {
   Check,
   Code2,
   Pause,
-  Edit
+  Edit,
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { Workflow, WorkflowNode } from '../types/workflow';
 import NodeLibrary from './NodeLibrary';
@@ -20,6 +22,8 @@ import NodeConfigPanel from './NodeConfigPanel';
 import ScrapingResults from './ScrapingResults';
 import IntegrationModal from './IntegrationModal';
 import { useWebScraper } from '../hooks/useWebScraper';
+import { useAutoSave } from '../hooks/useAutoSave';
+import { useToast } from './Toast';
 
 interface WorkflowBuilderProps {
   workflow: Workflow;
@@ -43,9 +47,30 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   const [url, setUrl] = useState(workflow.targetUrl || '');
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   
+  // Change detection and save state management
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalWorkflow, setOriginalWorkflow] = useState<Workflow>(workflow);
+  const [isSaving, setIsSaving] = useState(false);
+  
   // Web scraping functionality
   const { isScraping, scrapingResult, scrapeUrl, clearResult } = useWebScraper();
   const [showScrapingResults, setShowScrapingResults] = useState(false);
+  
+  // Toast notifications
+  const { showToast } = useToast();
+
+  // Deep comparison for change detection
+  const hasChanges = useMemo(() => {
+    if (!originalWorkflow) return false;
+    
+    return (
+      currentWorkflow.name !== originalWorkflow.name ||
+      currentWorkflow.description !== originalWorkflow.description ||
+      currentWorkflow.targetUrl !== originalWorkflow.targetUrl ||
+      JSON.stringify(currentWorkflow.nodes) !== JSON.stringify(originalWorkflow.nodes) ||
+      JSON.stringify(currentWorkflow.connections) !== JSON.stringify(originalWorkflow.connections)
+    );
+  }, [currentWorkflow, originalWorkflow]);
 
   // Sync internal state with workflow prop when it changes
   useEffect(() => {
@@ -53,11 +78,65 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
     setTempName(workflow.name);
     setUrl(workflow.targetUrl || '');
     setSelectedNode(null);
+    setOriginalWorkflow(workflow);
+    setHasUnsavedChanges(false);
   }, [workflow]);
 
   useEffect(() => {
     setUrl(workflow.targetUrl || '');
   }, [workflow.targetUrl]);
+
+  // Update unsaved state when changes detected
+  useEffect(() => {
+    setHasUnsavedChanges(hasChanges);
+  }, [hasChanges]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (hasChanges && !isSaving) {
+          handleSave();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasChanges, isSaving]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  // Auto-save functionality
+  const autoSaveStatus = useAutoSave(currentWorkflow, {
+    enabled: hasChanges && !isSaving,
+    delay: 3000, // 3 seconds
+    onSave: async (workflow) => {
+      await onSave(workflow);
+      return workflow; // Return the workflow for the hook
+    },
+    onSuccess: (workflow) => {
+      // The workflow prop will be updated by the parent component
+      console.log('🔄 Auto-saved workflow');
+    },
+    onError: (error) => {
+      console.error('❌ Auto-save failed:', error);
+      showToast('Auto-save failed', 'error');
+    }
+  });
 
   const calculateNodePosition = useCallback((nodeType: string, currentNodes: WorkflowNode[]) => {
     const triggerNode = currentNodes.find(n => n.type === 'trigger');
@@ -164,8 +243,22 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
     setSelectedNode(null);
   }, []);
 
-  const handleSave = () => {
-    onSave(currentWorkflow);
+  const handleSave = async () => {
+    if (!hasChanges || isSaving) return;
+    
+    try {
+      setIsSaving(true);
+      
+      await onSave(currentWorkflow);
+      
+      // The workflow prop will be updated by the parent component
+      // So we'll reset change tracking in the useEffect when workflow changes
+      
+    } catch (error) {
+      console.error('Save failed:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddConnection = useCallback((sourceNodeId: string) => {
@@ -285,71 +378,155 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
         
         {/* Floating Action Buttons - Right side */}
         <div className="flex items-center space-x-3 pointer-events-auto">
-          {/* Workflow Status Toggle */}
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-secondary-600">Status:</span>
-            <button
-              onClick={() => {
-                const newStatus = currentWorkflow.status === 'active' ? 'draft' : 'active';
-                setCurrentWorkflow(prev => ({
-                  ...prev,
-                  status: newStatus,
-                  isActive: newStatus === 'active'
-                }));
-              }}
-              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
-                currentWorkflow.status === 'active'
-                  ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200'
-                  : currentWorkflow.status === 'paused'
-                  ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'
-                  : 'bg-secondary-100 text-secondary-800 border-secondary-200 hover:bg-secondary-200'
-              }`}
-            >
-              {currentWorkflow.status === 'active' ? (
+          {/* Auto-save Status Indicator */}
+          {autoSaveStatus.status !== 'idle' && (
+            <div className={`flex items-center space-x-1 text-xs px-2 py-1 rounded-md bg-white/90 backdrop-blur-sm border ${
+              autoSaveStatus.status === 'saving'
+                ? 'border-blue-200 text-blue-600'
+                : autoSaveStatus.status === 'saved'
+                ? 'border-green-200 text-green-600'
+                : 'border-red-200 text-red-600'
+            }`}>
+              {autoSaveStatus.status === 'saving' ? (
                 <>
-                  <Play className="w-3 h-3 mr-1" />
-                  Active
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Auto-saving...</span>
                 </>
-              ) : currentWorkflow.status === 'paused' ? (
+              ) : autoSaveStatus.status === 'saved' ? (
                 <>
-                  <Pause className="w-3 h-3 mr-1" />
-                  Paused
+                  <Check className="w-3 h-3" />
+                  <span>Auto-saved</span>
+                  {autoSaveStatus.lastSave && (
+                    <span className="text-gray-500">
+                      • {autoSaveStatus.lastSave.toLocaleTimeString('en-US', { 
+                        hour12: false, 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit' 
+                      })}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
-                  <Edit className="w-3 h-3 mr-1" />
-                  Draft
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Auto-save failed</span>
                 </>
               )}
-            </button>
+            </div>
+          )}
+          {/* Workflow Status Toggle */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-secondary-600">Status:</span>
+            <div className="relative">
+              <button
+                onClick={async () => {
+                  // Create a status dropdown similar to the one in WorkflowList
+                  const currentStatus = currentWorkflow.status;
+                  let newStatus: 'draft' | 'active' | 'paused' | 'error';
+                  
+                  // Cycle through statuses: draft -> active -> paused -> draft
+                  if (currentStatus === 'draft') {
+                    newStatus = 'active';
+                  } else if (currentStatus === 'active') {
+                    newStatus = 'paused';
+                  } else {
+                    newStatus = 'draft';
+                  }
+                  
+                  // Update local state
+                  const updatedWorkflow = {
+                    ...currentWorkflow,
+                    status: newStatus,
+                    isActive: newStatus === 'active',
+                    updatedAt: new Date()
+                  };
+                  
+                  setCurrentWorkflow(updatedWorkflow);
+                  
+                  // Save to database immediately
+                  try {
+                    await onSave(updatedWorkflow);
+                    showToast(`Workflow status changed to ${newStatus}`, 'success');
+                  } catch (error: any) {
+                    showToast(`Failed to update status: ${error.message}`, 'error');
+                    // Revert on error
+                    setCurrentWorkflow(currentWorkflow);
+                  }
+                }}
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                  currentWorkflow.status === 'active'
+                    ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200'
+                    : currentWorkflow.status === 'paused'
+                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'
+                    : currentWorkflow.status === 'error'
+                    ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200'
+                    : 'bg-secondary-100 text-secondary-800 border-secondary-200 hover:bg-secondary-200'
+                }`}
+                title="Click to cycle through statuses"
+              >
+                {currentWorkflow.status === 'active' ? (
+                  <>
+                    <Play className="w-3 h-3 mr-1" />
+                    Active
+                  </>
+                ) : currentWorkflow.status === 'paused' ? (
+                  <>
+                    <Pause className="w-3 h-3 mr-1" />
+                    Paused
+                  </>
+                ) : currentWorkflow.status === 'error' ? (
+                  <>
+                    <AlertCircle className="w-3 h-3 mr-1" />
+                    Error
+                  </>
+                ) : (
+                  <>
+                    <Edit className="w-3 h-3 mr-1" />
+                    Draft
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           
-          {/* Integration Button - Show when URL is set and scraping is complete */}
-          {url && isDone && scrapingResult?.success && (
-            <button
-              onClick={() => setShowIntegrationModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 text-primary-700 bg-primary-50/90 backdrop-blur-sm border border-primary-200 hover:bg-primary-100 transition-colors font-medium text-sm rounded-lg shadow-sm"
-            >
-              <Code2 className="w-4 h-4" />
-              <span>Integration</span>
-            </button>
-          )}
+          {/* Integration Button - Always visible */}
+          <button
+            onClick={() => setShowIntegrationModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 text-primary-700 bg-primary-50/90 backdrop-blur-sm border border-primary-200 hover:bg-primary-100 transition-colors font-medium text-sm rounded-lg shadow-sm"
+          >
+            <Code2 className="w-4 h-4" />
+            <span>Integration</span>
+          </button>
+          {/* Enhanced Save Button */}
           <button
             onClick={handleSave}
-            className="flex items-center space-x-2 px-4 py-2 text-secondary-700 bg-white/90 backdrop-blur-sm border border-secondary-200 hover:bg-white transition-colors font-medium text-sm rounded-lg shadow-sm"
+            disabled={!hasChanges || isSaving}
+            className={`flex items-center space-x-2 px-4 py-2 backdrop-blur-sm border transition-all font-medium text-sm rounded-lg shadow-sm ${
+              isSaving
+                ? 'text-blue-700 bg-blue-50/90 border-blue-200'
+                : hasChanges
+                ? 'text-orange-700 bg-orange-50/90 border-orange-200 hover:bg-orange-100 animate-pulse'
+                : 'text-green-700 bg-green-50/90 border-green-200'
+            } ${(!hasChanges || isSaving) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
           >
-            <Save className="w-4 h-4" />
-            <span>Save</span>
-          </button>
-          <button 
-            className={`flex items-center space-x-2 px-4 py-2 backdrop-blur-sm text-white transition-colors font-medium text-sm rounded-lg shadow-sm ${
-              currentWorkflow.status === 'active' 
-                ? 'bg-green-600/90 hover:bg-green-700' 
-                : 'bg-secondary-600/90 hover:bg-secondary-700'
-            }`}
-          >
-            <Play className="w-4 h-4" />
-            <span>{currentWorkflow.status === 'active' ? 'Test Live' : 'Test Draft'}</span>
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : hasChanges ? (
+              <>
+                <AlertCircle className="w-4 h-4" />
+                <span>Save Changes</span>
+                <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Saved</span>
+              </>
+            )}
           </button>
         </div>
       </div>

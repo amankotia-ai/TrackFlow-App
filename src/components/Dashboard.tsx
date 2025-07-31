@@ -9,7 +9,6 @@ import {
   Users,
   Zap,
   Plus,
-  Download,
   RefreshCw,
   Loader2,
   AlertCircle
@@ -250,10 +249,6 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
             
             {/* Action Buttons */}
             <div className="flex items-center space-x-2">
-              <button className="flex items-center space-x-2 px-4 py-2 text-secondary-700 bg-white border border-secondary-300 hover:bg-secondary-50 transition-colors font-medium text-sm rounded-lg">
-                <Download className="w-4 h-4" />
-                <span>Export</span>
-              </button>
               <button className="flex items-center space-x-2 px-4 py-2 text-secondary-700 bg-white border border-secondary-300 hover:bg-secondary-50 transition-colors font-medium text-sm rounded-lg">
                 <RefreshCw className="w-4 h-4" />
                 <span>Refresh</span>

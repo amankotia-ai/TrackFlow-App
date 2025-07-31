@@ -11,6 +11,8 @@ import Analytics from './components/Analytics';
 import ApiKeyManager from './components/ApiKeyManager';
 import Auth from './components/Auth';
 import ErrorBoundary from './components/ErrorBoundary';
+import NewWorkflowModal, { NewWorkflowData } from './components/NewWorkflowModal';
+import { ToastProvider, useToast } from './components/Toast';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 // Simple loading component
@@ -33,7 +35,9 @@ function AuthenticatedApp() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showNewWorkflowModal, setShowNewWorkflowModal] = useState(false);
   const isMountedRef = useRef(true);
+  const { showToast } = useToast();
 
   // Load data on mount - simple and clean
   useEffect(() => {
@@ -81,10 +85,15 @@ function AuthenticatedApp() {
   };
 
   const handleCreateWorkflow = () => {
+    setShowNewWorkflowModal(true);
+  };
+
+  // New handler for modal submission
+  const handleNewWorkflowSubmit = (workflowData: NewWorkflowData) => {
     const newWorkflow: Workflow = {
       id: `workflow-${Date.now()}`,
-      name: 'New Playbook',
-      description: 'A new personalization playbook',
+      name: workflowData.name,
+      description: workflowData.description || `Personalization playbook for ${workflowData.targetUrl}`,
       isActive: false,
       status: 'draft',
       executions: 0,
@@ -92,10 +101,13 @@ function AuthenticatedApp() {
       connections: [],
       createdAt: new Date(),
       updatedAt: new Date(),
-      targetUrl: ''
+      targetUrl: workflowData.targetUrl
     };
+    
     setWorkflows(prev => [...prev, newWorkflow]);
     setSelectedWorkflow(newWorkflow);
+    setShowNewWorkflowModal(false);
+    showToast(`Workflow "${workflowData.name}" created successfully`, 'success');
   };
 
   const handleWorkflowSave = async (workflow: Workflow) => {
@@ -109,9 +121,12 @@ function AuthenticatedApp() {
       
       setSelectedWorkflow(savedWorkflow);
       console.log('✅ Workflow saved successfully');
+      showToast('Workflow saved successfully', 'success');
+      return savedWorkflow;
     } catch (error: any) {
       console.error('Error saving workflow:', error);
-      alert(`Failed to save workflow: ${error.message}`);
+      showToast(`Failed to save workflow: ${error.message}`, 'error');
+      throw error;
     }
   };
 
@@ -127,9 +142,10 @@ function AuthenticatedApp() {
       }
       
       console.log('✅ Workflow deleted successfully');
+      showToast('Workflow deleted successfully', 'success');
     } catch (error: any) {
       console.error('Error deleting workflow:', error);
-      alert(`Failed to delete workflow: ${error.message}`);
+      showToast(`Failed to delete workflow: ${error.message}`, 'error');
     }
   };
 
@@ -187,6 +203,16 @@ function AuthenticatedApp() {
             workflows={workflows}
             onWorkflowSelect={handleWorkflowSelect}
             onCreateWorkflow={handleCreateWorkflow}
+            onWorkflowImport={(importedWorkflow) => {
+              setWorkflows(prev => [...prev, importedWorkflow]);
+              showToast(`Workflow "${importedWorkflow.name}" imported successfully`, 'success');
+            }}
+            onWorkflowUpdate={(updatedWorkflow) => {
+              setWorkflows(prev => 
+                prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
+              );
+            }}
+            onWorkflowDelete={handleWorkflowDelete}
           />
         );
       case 'templates':
@@ -208,6 +234,13 @@ function AuthenticatedApp() {
       <div className="ml-64">
         {renderContent()}
       </div>
+      
+      {/* New Workflow Modal */}
+      <NewWorkflowModal
+        isOpen={showNewWorkflowModal}
+        onClose={() => setShowNewWorkflowModal(false)}
+        onCreateWorkflow={handleNewWorkflowSubmit}
+      />
     </div>
   );
 }
@@ -232,7 +265,9 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

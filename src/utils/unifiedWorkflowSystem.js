@@ -132,6 +132,18 @@
         // Set up event listeners for dynamic triggers
         this.setupEventListeners();
         
+        // Set up element visibility tracking for visibility triggers
+        this.setupElementVisibilityTracking();
+        
+        // Set up element hover tracking for hover triggers
+        this.setupElementHoverTracking();
+        
+        // Set up user inactivity tracking for inactivity triggers
+        this.setupUserInactivityTracking();
+        
+        // Set up visit count tracking for repeat visitor triggers
+        this.setupVisitCountTracking();
+        
         // Set up mutation observer for dynamic content
         this.setupMutationObserver();
         
@@ -595,6 +607,311 @@
     }
 
     /**
+     * Set up element visibility tracking for Element Visibility triggers
+     */
+    setupElementVisibilityTracking() {
+      if (this.workflows.size === 0) {
+        this.log('⚠️ No workflows available for visibility tracking setup', 'warning');
+        return;
+      }
+
+      const uniqueSelectors = new Set();
+      let visibilityTriggersFound = 0;
+
+      // Collect all unique selectors from Element Visibility triggers
+      this.workflows.forEach(workflow => {
+        const isActive = workflow.is_active ?? workflow.isActive ?? true;
+        if (!isActive) return;
+
+        const triggerNodes = workflow.nodes?.filter(node => node.type === 'trigger') || [];
+        
+        triggerNodes.forEach(trigger => {
+          if (trigger.name === 'Element Visibility' && trigger.config?.elementSelector) {
+            visibilityTriggersFound++;
+            const selectors = trigger.config.elementSelector.split(',').map(s => s.trim());
+            selectors.forEach(selector => uniqueSelectors.add(selector));
+          }
+        });
+      });
+
+      this.log(`👁️ Found ${visibilityTriggersFound} Element Visibility triggers with ${uniqueSelectors.size} unique selectors`);
+
+      if (uniqueSelectors.size === 0) {
+        this.log('👁️ No Element Visibility triggers found, skipping visibility tracking setup');
+        return;
+      }
+
+      // Set up intersection observers for each unique selector
+      uniqueSelectors.forEach(selector => {
+        this.setupVisibilityObserver(selector);
+      });
+
+      this.log(`👁️ Element visibility tracking configured for ${uniqueSelectors.size} selectors`, 'success');
+    }
+
+    /**
+     * Set up intersection observer for a specific selector
+     */
+    setupVisibilityObserver(selector) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        
+        if (elements.length === 0) {
+          this.log(`👁️ No elements found for visibility tracking: "${selector}"`, 'warning');
+          return;
+        }
+
+        this.log(`👁️ Setting up visibility tracking for ${elements.length} elements matching: "${selector}"`);
+
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            const visibilityPercentage = Math.round(entry.intersectionRatio * 100);
+            const eventType = entry.isIntersecting ? 'element_visible' : 'element_hidden';
+            
+            // Only process visibility events, not hidden events for now
+            if (eventType === 'element_visible') {
+              this.handleEvent({
+                eventType: eventType,
+                elementSelector: this.generateSelector(entry.target),
+                element: entry.target,
+                eventData: {
+                  visibilityPercentage: visibilityPercentage,
+                  intersectionRatio: entry.intersectionRatio
+                },
+                timestamp: Date.now()
+              });
+            }
+          });
+        }, { 
+          threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0] // Multiple thresholds for accurate percentage calculation
+        });
+
+        elements.forEach(element => {
+          observer.observe(element);
+        });
+
+        // Store observer for cleanup if needed
+        if (!this.visibilityObservers) {
+          this.visibilityObservers = new Map();
+        }
+        this.visibilityObservers.set(selector, observer);
+
+      } catch (error) {
+        this.log(`❌ Error setting up visibility observer for "${selector}": ${error.message}`, 'error');
+      }
+    }
+
+    /**
+     * Set up element hover tracking for Element Hover triggers
+     */
+    setupElementHoverTracking() {
+      if (this.workflows.size === 0) {
+        this.log('⚠️ No workflows available for hover tracking setup', 'warning');
+        return;
+      }
+
+      const uniqueSelectors = new Set();
+      let hoverTriggersFound = 0;
+
+      // Collect all unique selectors from Element Hover triggers
+      this.workflows.forEach(workflow => {
+        const isActive = workflow.is_active ?? workflow.isActive ?? true;
+        if (!isActive) return;
+
+        const triggerNodes = workflow.nodes?.filter(node => node.type === 'trigger') || [];
+        
+        triggerNodes.forEach(trigger => {
+          if (trigger.name === 'Element Hover' && trigger.config?.elementSelector) {
+            hoverTriggersFound++;
+            const selectors = trigger.config.elementSelector.split(',').map(s => s.trim());
+            selectors.forEach(selector => uniqueSelectors.add(selector));
+          }
+        });
+      });
+
+      this.log(`🖱️ Found ${hoverTriggersFound} Element Hover triggers with ${uniqueSelectors.size} unique selectors`);
+
+      if (uniqueSelectors.size === 0) {
+        this.log('🖱️ No Element Hover triggers found, skipping hover tracking setup');
+        return;
+      }
+
+      // Set up hover listeners for each unique selector
+      uniqueSelectors.forEach(selector => {
+        this.setupHoverListener(selector);
+      });
+
+      this.log(`🖱️ Element hover tracking configured for ${uniqueSelectors.size} selectors`, 'success');
+    }
+
+    /**
+     * Set up hover listener for a specific selector
+     */
+    setupHoverListener(selector) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        
+        if (elements.length === 0) {
+          this.log(`🖱️ No elements found for hover tracking: "${selector}"`, 'warning');
+          return;
+        }
+
+        this.log(`🖱️ Setting up hover tracking for ${elements.length} elements matching: "${selector}"`);
+
+        elements.forEach(element => {
+          element.addEventListener('mouseenter', (event) => {
+            this.handleEvent({
+              eventType: 'mouseenter',
+              elementSelector: this.generateSelector(event.target),
+              element: event.target,
+              timestamp: Date.now()
+            });
+          });
+
+          // Also set up for touch events if needed
+          element.addEventListener('touchstart', (event) => {
+            this.handleEvent({
+              eventType: 'hover', // Map touch to hover for consistency
+              elementSelector: this.generateSelector(event.target),
+              element: event.target,
+              timestamp: Date.now()
+            });
+          });
+        });
+
+      } catch (error) {
+        this.log(`❌ Error setting up hover listener for "${selector}": ${error.message}`, 'error');
+      }
+    }
+
+    /**
+     * Set up user inactivity tracking
+     */
+    setupUserInactivityTracking() {
+      // Check if we have any inactivity triggers
+      let inactivityTriggersFound = 0;
+      let minInactivityTime = Infinity;
+
+      this.workflows.forEach(workflow => {
+        const isActive = workflow.is_active ?? workflow.isActive ?? true;
+        if (!isActive) return;
+
+        const triggerNodes = workflow.nodes?.filter(node => node.type === 'trigger') || [];
+        
+        triggerNodes.forEach(trigger => {
+          if (trigger.name === 'User Inactivity') {
+            inactivityTriggersFound++;
+            const inactivityTime = trigger.config?.inactivityTime || 30;
+            const unit = trigger.config?.unit || 'seconds';
+            const timeMs = unit === 'minutes' ? inactivityTime * 60 * 1000 : inactivityTime * 1000;
+            minInactivityTime = Math.min(minInactivityTime, timeMs);
+          }
+        });
+      });
+
+      this.log(`⏱️ Found ${inactivityTriggersFound} User Inactivity triggers`);
+
+      if (inactivityTriggersFound === 0) {
+        this.log('⏱️ No User Inactivity triggers found, skipping inactivity tracking setup');
+        return;
+      }
+
+      // Set up inactivity tracking
+      let lastActivityTime = Date.now();
+      let inactivityTimer = null;
+
+      const resetInactivityTimer = () => {
+        lastActivityTime = Date.now();
+        
+        if (inactivityTimer) {
+          clearTimeout(inactivityTimer);
+        }
+
+        // Set timer for the minimum inactivity time found
+        inactivityTimer = setTimeout(() => {
+          const inactivityDuration = Date.now() - lastActivityTime;
+          
+          this.handleEvent({
+            eventType: 'user_inactive',
+            inactivityDuration: inactivityDuration,
+            timestamp: Date.now()
+          });
+        }, minInactivityTime);
+      };
+
+      // Track user activity events
+      const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+      
+      activityEvents.forEach(eventType => {
+        document.addEventListener(eventType, resetInactivityTimer, { passive: true });
+      });
+
+      // Start the initial timer
+      resetInactivityTimer();
+
+      this.log(`⏱️ User inactivity tracking configured (min threshold: ${minInactivityTime}ms)`, 'success');
+    }
+
+    /**
+     * Set up visit count tracking for repeat visitor triggers
+     */
+    setupVisitCountTracking() {
+      // Check if we have any repeat visitor triggers
+      let repeatVisitorTriggersFound = 0;
+
+      this.workflows.forEach(workflow => {
+        const isActive = workflow.is_active ?? workflow.isActive ?? true;
+        if (!isActive) return;
+
+        const triggerNodes = workflow.nodes?.filter(node => node.type === 'trigger') || [];
+        
+        triggerNodes.forEach(trigger => {
+          if (trigger.name === 'Repeat Visitor') {
+            repeatVisitorTriggersFound++;
+          }
+        });
+      });
+
+      this.log(`🔄 Found ${repeatVisitorTriggersFound} Repeat Visitor triggers`);
+
+      if (repeatVisitorTriggersFound === 0) {
+        this.log('🔄 No Repeat Visitor triggers found, skipping visit count tracking setup');
+        return;
+      }
+
+      try {
+        // Get current visit count from localStorage
+        let visitCount = parseInt(localStorage.getItem('trackflow_visit_count') || '0', 10);
+        
+        // Increment visit count
+        visitCount++;
+        
+        // Store updated visit count
+        localStorage.setItem('trackflow_visit_count', visitCount.toString());
+        
+        // Store first visit timestamp if not exists
+        if (!localStorage.getItem('trackflow_first_visit')) {
+          localStorage.setItem('trackflow_first_visit', Date.now().toString());
+        }
+        
+        // Store last visit timestamp
+        localStorage.setItem('trackflow_last_visit', Date.now().toString());
+        
+        this.log(`🔄 Visit count tracking configured. Current visit: ${visitCount}`, 'success');
+        
+        // Trigger immediate evaluation for repeat visitor triggers with current visit count
+        this.handleEvent({
+          eventType: 'page_load',
+          visitCount: visitCount,
+          timestamp: Date.now()
+        });
+        
+      } catch (error) {
+        this.log(`❌ Error setting up visit count tracking: ${error.message}`, 'error');
+      }
+    }
+
+    /**
      * Detect if a clicked element is a close/dismiss button
      */
     isCloseButton(element) {
@@ -850,6 +1167,22 @@
           shouldTrigger = this.evaluateElementClickTrigger(config, eventData);
           break;
           
+        case 'Element Visibility':
+          shouldTrigger = this.evaluateElementVisibilityTrigger(config, eventData);
+          break;
+          
+        case 'Element Hover':
+          shouldTrigger = this.evaluateElementHoverTrigger(config, eventData);
+          break;
+          
+        case 'User Inactivity':
+          shouldTrigger = this.evaluateUserInactivityTrigger(config, eventData);
+          break;
+          
+        case 'Repeat Visitor':
+          shouldTrigger = this.evaluateRepeatVisitorTrigger(config, eventData);
+          break;
+          
         case 'Exit Intent':
           shouldTrigger = this.evaluateExitIntentTrigger(config, eventData);
           break;
@@ -1027,6 +1360,173 @@
 
       this.log(`🌍 Geolocation trigger result: ${isMatch}`, isMatch ? 'success' : 'info');
       return isMatch;
+    }
+
+    /**
+     * Evaluate element visibility trigger
+     */
+    evaluateElementVisibilityTrigger(config, eventData) {
+      // Only process element_visible events
+      if (eventData.eventType !== 'element_visible') {
+        return false;
+      }
+
+      const { elementSelector, visibilityThreshold = 50, duration = 0 } = config;
+      
+      if (!elementSelector) {
+        this.log('⚠️ Element Visibility trigger: Missing elementSelector config', 'warning');
+        return false;
+      }
+
+      // Check if the event's element selector matches the configured selector
+      const eventElementSelector = eventData.elementSelector || '';
+      
+      // Split configured selector by commas to handle multiple selectors
+      const configSelectors = elementSelector.split(',').map(s => s.trim());
+      
+      // Check if any of the configured selectors match the event's element
+      const selectorMatches = configSelectors.some(selector => {
+        // Exact match
+        if (eventElementSelector === selector) return true;
+        
+        // Check if the event element matches the selector via DOM query
+        try {
+          const element = eventData.element || document.querySelector(eventElementSelector);
+          if (element && element.matches && element.matches(selector)) return true;
+        } catch (e) {
+          // Ignore selector parsing errors
+        }
+        
+        return false;
+      });
+
+      if (!selectorMatches) {
+        this.log(`👁️ Element visibility: Selector mismatch. Event: "${eventElementSelector}", Config: "${elementSelector}"`, 'info');
+        return false;
+      }
+
+      // Check visibility threshold
+      const visibilityPercentage = eventData.eventData?.visibilityPercentage || 0;
+      if (visibilityPercentage < visibilityThreshold) {
+        this.log(`👁️ Element visibility: Threshold not met. ${visibilityPercentage}% < ${visibilityThreshold}%`, 'info');
+        return false;
+      }
+
+      // TODO: Implement duration check if needed (would require tracking visibility start time)
+      // For now, we'll ignore duration and trigger immediately when threshold is met
+
+      this.log(`👁️ Element visibility trigger matched: ${eventElementSelector} (${visibilityPercentage}% >= ${visibilityThreshold}%)`, 'success');
+      return true;
+    }
+
+    /**
+     * Evaluate element hover trigger
+     */
+    evaluateElementHoverTrigger(config, eventData) {
+      // Check for hover-related events
+      if (eventData.eventType !== 'mouseenter' && eventData.eventType !== 'hover') {
+        return false;
+      }
+
+      const { elementSelector, hoverDuration = 2000, includeTouch = false } = config;
+      
+      if (!elementSelector) {
+        this.log('⚠️ Element Hover trigger: Missing elementSelector config', 'warning');
+        return false;
+      }
+
+      // Check if the event's element selector matches the configured selector
+      const eventElementSelector = eventData.elementSelector || '';
+      
+      // Split configured selector by commas to handle multiple selectors
+      const configSelectors = elementSelector.split(',').map(s => s.trim());
+      
+      // Check if any of the configured selectors match the event's element
+      const selectorMatches = configSelectors.some(selector => {
+        // Exact match
+        if (eventElementSelector === selector) return true;
+        
+        // Check if the event element matches the selector via DOM query
+        try {
+          const element = eventData.element || document.querySelector(eventElementSelector);
+          if (element && element.matches && element.matches(selector)) return true;
+        } catch (e) {
+          // Ignore selector parsing errors
+        }
+        
+        return false;
+      });
+
+      if (!selectorMatches) {
+        this.log(`🖱️ Element hover: Selector mismatch. Event: "${eventElementSelector}", Config: "${elementSelector}"`, 'info');
+        return false;
+      }
+
+      // For now, we'll trigger immediately on hover without duration checking
+      // TODO: Implement hover duration tracking if needed
+      this.log(`🖱️ Element hover trigger matched: ${eventElementSelector}`, 'success');
+      return true;
+    }
+
+    /**
+     * Evaluate user inactivity trigger
+     */
+    evaluateUserInactivityTrigger(config, eventData) {
+      // Only process inactivity events
+      if (eventData.eventType !== 'user_inactive') {
+        return false;
+      }
+
+      const { inactivityTime = 30, unit = 'seconds' } = config;
+      
+      // Convert to milliseconds
+      const thresholdMs = unit === 'minutes' ? inactivityTime * 60 * 1000 : inactivityTime * 1000;
+      
+      // Check if the inactivity duration meets the threshold
+      const inactivityDuration = eventData.inactivityDuration || 0;
+      
+      if (inactivityDuration >= thresholdMs) {
+        this.log(`⏱️ User inactivity trigger matched: ${inactivityDuration}ms >= ${thresholdMs}ms`, 'success');
+        return true;
+      }
+
+      this.log(`⏱️ User inactivity: Threshold not met. ${inactivityDuration}ms < ${thresholdMs}ms`, 'info');
+      return false;
+    }
+
+    /**
+     * Evaluate repeat visitor trigger
+     */
+    evaluateRepeatVisitorTrigger(config, eventData) {
+      const { visitCount = 2, timeframe = 'all_time' } = config;
+      
+      // Get visit count from session storage or event data
+      let currentVisitCount = 0;
+      
+      try {
+        // Try to get from event data first
+        if (eventData.visitCount !== undefined) {
+          currentVisitCount = eventData.visitCount;
+        } else {
+          // Fallback to session storage
+          const storedVisits = localStorage.getItem('trackflow_visit_count') || '1';
+          currentVisitCount = parseInt(storedVisits, 10) || 1;
+        }
+      } catch (error) {
+        this.log(`⚠️ Repeat visitor: Error getting visit count: ${error.message}`, 'warning');
+        currentVisitCount = 1;
+      }
+
+      // For now, we'll only implement 'all_time' timeframe
+      // TODO: Implement other timeframes (last_30_days, etc.) if needed
+      
+      if (currentVisitCount >= visitCount) {
+        this.log(`🔄 Repeat visitor trigger matched: ${currentVisitCount} >= ${visitCount} visits`, 'success');
+        return true;
+      }
+
+      this.log(`🔄 Repeat visitor: Threshold not met. ${currentVisitCount} < ${visitCount} visits`, 'info');
+      return false;
     }
 
     /**

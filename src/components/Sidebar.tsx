@@ -3,7 +3,6 @@ import {
   Home, 
   Workflow, 
   Settings, 
-  FileText, 
   Activity, 
   Users, 
   Database,
@@ -26,7 +25,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, onCreateWorkf
   const organizationItems = [
     { id: 'dashboard', icon: Home, label: 'Dashboard' },
     { id: 'workflows', icon: Workflow, label: 'Playbooks' },
-    { id: 'templates', icon: FileText, label: 'Templates' },
     { id: 'analytics', icon: Activity, label: 'Analytics' },
   ];
 
