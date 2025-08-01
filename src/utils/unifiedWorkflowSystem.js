@@ -18,10 +18,10 @@
         executionDelay: 100,
         hideContentDuringInit: true,
         maxInitTime: 5000, // Increased timeout
-        elementWaitTimeout: 15000, // Base timeout for elements - increased for heavy pages
-        heavyPageTimeout: 30000, // Extended timeout for heavy pages
-        maxRetryAttempts: 5, // Number of retry attempts for element waiting
-        retryBackoffMultiplier: 1.5, // Exponential backoff for retries
+        elementWaitTimeout: 12000, // Base timeout for elements - increased for heavy pages
+        heavyPageTimeout: 20000, // Extended timeout for heavy pages
+        maxRetryAttempts: 3, // Number of retry attempts for element waiting
+        retryBackoffMultiplier: 1.3, // Exponential backoff for retries
         showLoadingIndicator: true, // Show loading spinner
         progressive: true, // Show content progressively as modifications complete
         ...config
@@ -2511,8 +2511,12 @@
         if (attempt < this.config.maxRetryAttempts) {
           this.log(`🔄 Retry ${attempt + 1}/${this.config.maxRetryAttempts} for element: ${selector}`, 'warning');
           
-          // Wait for page to stabilize before retry
-          await this.waitForPageStability();
+          // Wait for page to stabilize before retry (but with shorter timeout)
+          try {
+            await this.waitForPageStability(1000); // Shorter stability wait
+          } catch (stabilityError) {
+            this.log(`⚠️ Page stability check failed, continuing with retry`, 'warning');
+          }
           
           return this.waitForElement(selector, timeout, attempt + 1);
         } else {
@@ -2530,18 +2534,19 @@
         let stabilityTimer;
         let mutationCount = 0;
         let networkActivityCount = 0;
+        let observer; // Declare observer variable first
         
         const resetTimer = () => {
           clearTimeout(stabilityTimer);
           stabilityTimer = setTimeout(() => {
-            observer.disconnect();
+            if (observer) observer.disconnect();
             this.log(`📊 Page stabilized after ${mutationCount} mutations, ${networkActivityCount} network events`);
             resolve();
           }, 500); // Wait 500ms of stability
         };
 
         // Monitor DOM mutations
-        const observer = new MutationObserver(() => {
+        observer = new MutationObserver(() => {
           mutationCount++;
           resetTimer();
         });
@@ -2593,7 +2598,7 @@
 
         // Max timeout to prevent infinite waiting
         setTimeout(() => {
-          observer.disconnect();
+          if (observer) observer.disconnect();
           clearTimeout(stabilityTimer);
           this.log(`⏰ Page stability timeout reached (${mutationCount} mutations, ${networkActivityCount} network events observed)`);
           resolve();
@@ -2633,14 +2638,22 @@
         }
 
         // Strategy 1.5: Fallback selector attempts (for cases where selector might be slightly off)
-        const fallbackSelectors = this.generateFallbackSelectors(selector);
-        for (const fallbackSelector of fallbackSelectors) {
-          element = document.querySelector(fallbackSelector);
-          if (element) {
-            this.log(`🎯 Found element using fallback selector: ${fallbackSelector}`);
-            resolveElement(element, 'fallback-selector');
-            return;
+        try {
+          const fallbackSelectors = this.generateFallbackSelectors(selector);
+          for (const fallbackSelector of fallbackSelectors) {
+            try {
+              element = document.querySelector(fallbackSelector);
+              if (element) {
+                this.log(`🎯 Found element using fallback selector: ${fallbackSelector}`);
+                resolveElement(element, 'fallback-selector');
+                return;
+              }
+            } catch (fallbackError) {
+              // Ignore individual fallback errors and continue
+            }
           }
+        } catch (fallbackGenerationError) {
+          this.log(`⚠️ Fallback selector generation failed, continuing with standard detection`, 'warning');
         }
 
         let observer, pollInterval, timeoutId;
