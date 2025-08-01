@@ -18,7 +18,10 @@
         executionDelay: 100,
         hideContentDuringInit: true,
         maxInitTime: 5000, // Increased timeout
-        elementWaitTimeout: 10000, // How long to wait for elements
+        elementWaitTimeout: 15000, // Base timeout for elements - increased for heavy pages
+        heavyPageTimeout: 30000, // Extended timeout for heavy pages
+        maxRetryAttempts: 5, // Number of retry attempts for element waiting
+        retryBackoffMultiplier: 1.5, // Exponential backoff for retries
         showLoadingIndicator: true, // Show loading spinner
         progressive: true, // Show content progressively as modifications complete
         ...config
@@ -2429,43 +2432,244 @@
       }
     }
 
-    async waitForElement(selector, timeout = null) {
-      const actualTimeout = timeout || this.config.elementWaitTimeout;
+    /**
+     * Detect if the current page is heavy/complex
+     */
+    detectHeavyPage() {
+      const scripts = document.scripts.length;
+      const images = document.images.length;
+      const stylesheets = document.styleSheets.length;
+      const totalElements = document.querySelectorAll('*').length;
       
+      // Consider page heavy if it has many resources or elements
+      const isHeavy = scripts > 10 || images > 20 || stylesheets > 5 || totalElements > 1000;
+      
+      if (isHeavy) {
+        this.log(`🏋️ Heavy page detected: ${scripts} scripts, ${images} images, ${totalElements} elements`);
+      }
+      
+      return isHeavy;
+    }
+
+    /**
+     * Generate fallback selectors for more robust element detection
+     */
+    generateFallbackSelectors(selector) {
+      const fallbacks = [];
+      
+      // If it's a class selector, try variations
+      if (selector.startsWith('.')) {
+        const className = selector.substring(1);
+        
+        // Try case-insensitive variations
+        fallbacks.push(`[class*="${className}" i]`);
+        fallbacks.push(`[class~="${className}" i]`);
+        
+        // Try partial matches
+        fallbacks.push(`[class*="${className.toLowerCase()}"]`);
+        fallbacks.push(`[class*="${className.toUpperCase()}"]`);
+        
+        // Try with common prefixes/suffixes
+        fallbacks.push(`.${className}-`);
+        fallbacks.push(`[class*="${className}-"]`);
+        fallbacks.push(`[class*="-${className}"]`);
+      }
+      
+      // If it's an ID selector, try variations
+      if (selector.startsWith('#')) {
+        const idName = selector.substring(1);
+        fallbacks.push(`[id*="${idName}" i]`);
+        fallbacks.push(`[id*="${idName.toLowerCase()}"]`);
+        fallbacks.push(`[id*="${idName.toUpperCase()}"]`);
+      }
+      
+      // Try data attribute variations for custom selectors
+      if (selector.includes('modal') || selector.includes('Modal')) {
+        fallbacks.push('[data-modal]', '[role="dialog"]', '.modal', '#modal', '[class*="modal" i]');
+      }
+      
+      if (selector.includes('contact') || selector.includes('Contact')) {
+        fallbacks.push('[data-contact]', '[class*="contact" i]', '[id*="contact" i]');
+      }
+      
+      return fallbacks;
+    }
+
+    /**
+     * Enhanced element waiting with retry mechanism for heavy pages
+     */
+    async waitForElement(selector, timeout = null, attempt = 1) {
+      const isHeavyPage = this.detectHeavyPage();
+      const baseTimeout = timeout || (isHeavyPage ? this.config.heavyPageTimeout : this.config.elementWaitTimeout);
+      const actualTimeout = Math.min(baseTimeout * Math.pow(this.config.retryBackoffMultiplier, attempt - 1), 60000); // Cap at 60s
+      
+      this.log(`⏳ Waiting for element: ${selector} (attempt ${attempt}/${this.config.maxRetryAttempts}, timeout: ${actualTimeout}ms${isHeavyPage ? ' - heavy page' : ''})`);
+      
+      try {
+        return await this.waitForElementSingle(selector, actualTimeout);
+      } catch (error) {
+        if (attempt < this.config.maxRetryAttempts) {
+          this.log(`🔄 Retry ${attempt + 1}/${this.config.maxRetryAttempts} for element: ${selector}`, 'warning');
+          
+          // Wait for page to stabilize before retry
+          await this.waitForPageStability();
+          
+          return this.waitForElement(selector, timeout, attempt + 1);
+        } else {
+          this.log(`❌ Element not found after ${this.config.maxRetryAttempts} attempts: ${selector}`, 'error');
+          throw error;
+        }
+      }
+    }
+
+    /**
+     * Wait for page to stabilize (no new network requests, DOM mutations settled)
+     */
+    async waitForPageStability(timeout = 3000) {
+      return new Promise((resolve) => {
+        let stabilityTimer;
+        let mutationCount = 0;
+        let networkActivityCount = 0;
+        
+        const resetTimer = () => {
+          clearTimeout(stabilityTimer);
+          stabilityTimer = setTimeout(() => {
+            observer.disconnect();
+            this.log(`📊 Page stabilized after ${mutationCount} mutations, ${networkActivityCount} network events`);
+            resolve();
+          }, 500); // Wait 500ms of stability
+        };
+
+        // Monitor DOM mutations
+        const observer = new MutationObserver(() => {
+          mutationCount++;
+          resetTimer();
+        });
+
+        // Monitor network activity (images, scripts, etc.)
+        const monitorNetworkActivity = () => {
+          // Check for pending images
+          const images = Array.from(document.images);
+          const pendingImages = images.filter(img => !img.complete);
+          
+          if (pendingImages.length > 0) {
+            this.log(`📡 Waiting for ${pendingImages.length} images to load`);
+            networkActivityCount++;
+            
+            Promise.all(pendingImages.map(img => new Promise(resolve => {
+              if (img.complete) resolve();
+              else {
+                img.onload = img.onerror = resolve;
+              }
+            }))).then(() => {
+              this.log(`🖼️ All images loaded`);
+              resetTimer();
+            });
+          }
+
+          // Check document ready state
+          if (document.readyState !== 'complete') {
+            networkActivityCount++;
+            document.addEventListener('readystatechange', () => {
+              if (document.readyState === 'complete') {
+                this.log(`📋 Document ready state: complete`);
+                resetTimer();
+              }
+            });
+          }
+        };
+
+        if (document.body) {
+          observer.observe(document.body, { 
+            childList: true, 
+            subtree: true, 
+            attributes: true 
+          });
+          monitorNetworkActivity();
+          resetTimer();
+        } else {
+          resolve(); // If no body, resolve immediately
+        }
+
+        // Max timeout to prevent infinite waiting
+        setTimeout(() => {
+          observer.disconnect();
+          clearTimeout(stabilityTimer);
+          this.log(`⏰ Page stability timeout reached (${mutationCount} mutations, ${networkActivityCount} network events observed)`);
+          resolve();
+        }, timeout);
+      });
+    }
+
+    /**
+     * Single element wait attempt with multiple detection strategies
+     */
+    async waitForElementSingle(selector, timeout) {
       return new Promise((resolve, reject) => {
         // Add to waiting set for tracking
         this.elementsToWaitFor.add(selector);
+        let resolved = false;
         
-        // Check if element already exists
-        const element = document.querySelector(selector);
-        if (element) {
+        const cleanup = () => {
           this.elementsToWaitFor.delete(selector);
-          this.log(`✅ Element found immediately: ${selector}`);
+          if (observer) observer.disconnect();
+          if (pollInterval) clearInterval(pollInterval);
+          if (timeoutId) clearTimeout(timeoutId);
+        };
+
+        const resolveElement = (element, method) => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          this.log(`✅ Element found via ${method}: ${selector}`);
           resolve(element);
+        };
+
+        // Strategy 1: Immediate check
+        let element = document.querySelector(selector);
+        if (element) {
+          resolveElement(element, 'immediate');
           return;
         }
 
-        this.log(`⏳ Waiting for element: ${selector} (timeout: ${actualTimeout}ms)`);
+        // Strategy 1.5: Fallback selector attempts (for cases where selector might be slightly off)
+        const fallbackSelectors = this.generateFallbackSelectors(selector);
+        for (const fallbackSelector of fallbackSelectors) {
+          element = document.querySelector(fallbackSelector);
+          if (element) {
+            this.log(`🎯 Found element using fallback selector: ${fallbackSelector}`);
+            resolveElement(element, 'fallback-selector');
+            return;
+          }
+        }
 
-        const observer = new MutationObserver(() => {
+        let observer, pollInterval, timeoutId;
+
+        // Strategy 2: Mutation Observer (primary)
+        observer = new MutationObserver(() => {
           const element = document.querySelector(selector);
           if (element) {
-            observer.disconnect();
-            this.elementsToWaitFor.delete(selector);
-            this.log(`✅ Element appeared: ${selector}`);
-            resolve(element);
+            resolveElement(element, 'mutation-observer');
           }
         });
 
-        // Observe with more comprehensive options
+        // Strategy 3: Polling fallback (for elements added via non-DOM methods)
+        pollInterval = setInterval(() => {
+          const element = document.querySelector(selector);
+          if (element) {
+            resolveElement(element, 'polling');
+          }
+        }, 250); // Poll every 250ms
+
+        // Observe with comprehensive options
         const observeOptions = { 
           childList: true, 
           subtree: true, 
-          attributes: true, 
-          attributeOldValue: true 
+          attributes: true,
+          attributeOldValue: true
         };
 
-        // Start observing - handle case where body might not exist yet
+        // Start observing
         if (document.body) {
           observer.observe(document.body, observeOptions);
         } else {
@@ -2479,12 +2683,15 @@
           bodyObserver.observe(document.documentElement, { childList: true });
         }
         
-        setTimeout(() => {
-          observer.disconnect();
-          this.elementsToWaitFor.delete(selector);
-          this.log(`❌ Element timeout: ${selector} not found within ${actualTimeout}ms`, 'error');
-          reject(new Error(`Element ${selector} not found within ${actualTimeout}ms`));
-        }, actualTimeout);
+        // Timeout handler
+        timeoutId = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          const error = new Error(`Element ${selector} not found within ${timeout}ms`);
+          this.log(`❌ Element timeout: ${selector} not found within ${timeout}ms`, 'error');
+          reject(error);
+        }, timeout);
       });
     }
 
