@@ -9,6 +9,7 @@ import WorkflowBuilder from './components/WorkflowBuilder';
 import Templates from './components/Templates';
 import Analytics from './components/Analytics';
 import ApiKeyManager from './components/ApiKeyManager';
+import Settings from './components/Settings';
 import Auth from './components/Auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import NewWorkflowModal, { NewWorkflowData } from './components/NewWorkflowModal';
@@ -221,6 +222,8 @@ function AuthenticatedApp() {
         return <Analytics workflows={workflows} />;
       case 'executions':
         return <Analytics workflows={workflows} />;
+      case 'settings':
+        return <Settings />;
       case 'api-keys':
         return <ApiKeyManager />;
       default:

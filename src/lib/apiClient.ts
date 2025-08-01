@@ -1390,6 +1390,203 @@ class ApiClient {
       };
     }
   }
+
+  /**
+   * Get user's API keys
+   */
+  async getUserApiKeys(): Promise<ApiResponse> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not authenticated',
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      const { data, error } = await supabase
+        .from('user_api_keys')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      return {
+        success: true,
+        data: data || [],
+        timestamp: new Date().toISOString(),
+      };
+      
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to load API keys',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Generate a new API key
+   */
+  async generateApiKey(keyName: string): Promise<ApiResponse> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not authenticated',
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      // Generate the API key using the database function
+      const { data: keyData, error: keyError } = await supabase
+        .rpc('generate_api_key');
+      
+      if (keyError) {
+        return {
+          success: false,
+          error: keyError.message,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      const apiKey = keyData;
+      
+      // Insert the API key into the database
+      const { data, error } = await supabase
+        .from('user_api_keys')
+        .insert({
+          user_id: user.id,
+          key_name: keyName,
+          api_key: apiKey,
+          is_active: true,
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      return {
+        success: true,
+        data: apiKey, // Return the actual API key for display
+        timestamp: new Date().toISOString(),
+      };
+      
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to generate API key',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Delete an API key
+   */
+  async deleteApiKey(keyId: string): Promise<ApiResponse> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not authenticated',
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      const { error } = await supabase
+        .from('user_api_keys')
+        .delete()
+        .eq('id', keyId)
+        .eq('user_id', user.id);
+      
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      return {
+        success: true,
+        timestamp: new Date().toISOString(),
+      };
+      
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to delete API key',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Update an API key (e.g., deactivate)
+   */
+  async updateApiKey(keyId: string, updates: { key_name?: string; is_active?: boolean }): Promise<ApiResponse> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not authenticated',
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      const { data, error } = await supabase
+        .from('user_api_keys')
+        .update(updates)
+        .eq('id', keyId)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      
+      return {
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      };
+      
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to update API key',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
 }
 
 // Export singleton instance

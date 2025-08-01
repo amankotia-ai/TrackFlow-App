@@ -104,9 +104,15 @@ export class WorkflowService {
   static async generateApiKey(keyName: string): Promise<string> {
     console.log(`🔑 Generating API key: ${keyName}...`);
     
-    // For now, return a placeholder since this would require additional API endpoint
-    // This can be implemented later if needed
-    throw new Error('API key generation not yet implemented in new system');
+    const response: ApiResponse = await apiClient.generateApiKey(keyName);
+    
+    if (!response.success) {
+      console.error('Failed to generate API key:', response.error);
+      throw new Error(response.error || 'Failed to generate API key');
+    }
+    
+    console.log('✅ API key generated successfully');
+    return response.data;
   }
 
   /**
@@ -115,9 +121,47 @@ export class WorkflowService {
   static async getUserApiKeys(): Promise<any[]> {
     console.log('🔑 Loading user API keys...');
     
-    // For now, return empty array since this would require additional API endpoint
-    // This can be implemented later if needed
-    console.log('API key management not yet implemented in new system');
-    return [];
+    const response: ApiResponse = await apiClient.getUserApiKeys();
+    
+    if (!response.success) {
+      console.error('Failed to load API keys:', response.error);
+      throw new Error(response.error || 'Failed to load API keys');
+    }
+    
+    console.log(`✅ Loaded ${response.data?.length || 0} API keys`);
+    return response.data || [];
+  }
+
+  /**
+   * Delete an API key
+   */
+  static async deleteApiKey(keyId: string): Promise<void> {
+    console.log(`🗑️ Deleting API key: ${keyId}...`);
+    
+    const response: ApiResponse = await apiClient.deleteApiKey(keyId);
+    
+    if (!response.success) {
+      console.error('Failed to delete API key:', response.error);
+      throw new Error(response.error || 'Failed to delete API key');
+    }
+    
+    console.log('✅ API key deleted successfully');
+  }
+
+  /**
+   * Update an API key
+   */
+  static async updateApiKey(keyId: string, updates: { key_name?: string; is_active?: boolean }): Promise<any> {
+    console.log(`✏️ Updating API key: ${keyId}...`);
+    
+    const response: ApiResponse = await apiClient.updateApiKey(keyId, updates);
+    
+    if (!response.success) {
+      console.error('Failed to update API key:', response.error);
+      throw new Error(response.error || 'Failed to update API key');
+    }
+    
+    console.log('✅ API key updated successfully');
+    return response.data;
   }
 } 

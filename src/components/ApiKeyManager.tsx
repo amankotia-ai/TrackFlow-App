@@ -90,6 +90,25 @@ const ApiKeyManager: React.FC = () => {
     }
   };
 
+  const deleteApiKey = async (keyId: string, keyName: string) => {
+    if (!confirm(`Are you sure you want to delete the API key "${keyName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setError(null);
+      await WorkflowService.deleteApiKey(keyId);
+      
+      // Reload the keys list
+      await loadApiKeys();
+      
+      console.log('✅ API Key deleted successfully');
+    } catch (err) {
+      console.error('Error deleting API key:', err);
+      setError('Failed to delete API key. Please try again.');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -267,6 +286,14 @@ const ApiKeyManager: React.FC = () => {
                       ) : (
                         <Copy className="w-4 h-4" />
                       )}
+                    </button>
+                    
+                    <button
+                      onClick={() => deleteApiKey(key.id, key.key_name)}
+                      className="p-2 text-red-500 hover:text-red-700 transition-colors"
+                      title="Delete API key"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
