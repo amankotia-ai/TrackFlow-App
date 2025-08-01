@@ -2429,9 +2429,30 @@
       }
     }
 
-    async waitForElement(selector, timeout = null) {
-      const actualTimeout = timeout || this.config.elementWaitTimeout;
+    /**
+     * Enhanced element waiting with retry mechanism for heavy pages
+     */
+    async waitForElement(selector, timeout = null, attempt = 1) {
+      // Simple fallback to original method if retries are causing issues
+      if (attempt > 1) {
+        return this.waitForElementSimple(selector, timeout || this.config.elementWaitTimeout);
+      }
       
+      const actualTimeout = timeout || this.config.elementWaitTimeout;
+      this.log(`⏳ Waiting for element: ${selector} (timeout: ${actualTimeout}ms)`);
+      
+      try {
+        return await this.waitForElementSimple(selector, actualTimeout);
+      } catch (error) {
+        this.log(`❌ Element not found: ${selector} - ${error.message}`, 'error');
+        throw error;
+      }
+    }
+
+    /**
+     * Simple, reliable element waiting method (back to basics)
+     */
+    async waitForElementSimple(selector, timeout) {
       return new Promise((resolve, reject) => {
         // Add to waiting set for tracking
         this.elementsToWaitFor.add(selector);
@@ -2445,7 +2466,7 @@
           return;
         }
 
-        this.log(`⏳ Waiting for element: ${selector} (timeout: ${actualTimeout}ms)`);
+        this.log(`⏳ Waiting for element: ${selector} (timeout: ${timeout}ms)`);
 
         const observer = new MutationObserver(() => {
           const element = document.querySelector(selector);
@@ -2457,12 +2478,10 @@
           }
         });
 
-        // Observe with more comprehensive options
+        // Observe with basic options
         const observeOptions = { 
           childList: true, 
-          subtree: true, 
-          attributes: true, 
-          attributeOldValue: true 
+          subtree: true
         };
 
         // Start observing - handle case where body might not exist yet
@@ -2482,9 +2501,9 @@
         setTimeout(() => {
           observer.disconnect();
           this.elementsToWaitFor.delete(selector);
-          this.log(`❌ Element timeout: ${selector} not found within ${actualTimeout}ms`, 'error');
-          reject(new Error(`Element ${selector} not found within ${actualTimeout}ms`));
-        }, actualTimeout);
+          this.log(`❌ Element timeout: ${selector} not found within ${timeout}ms`, 'error');
+          reject(new Error(`Element ${selector} not found within ${timeout}ms`));
+        }, timeout);
       });
     }
 
