@@ -10,13 +10,12 @@
     constructor(config = {}) {
       // Prevent conflicts with unified workflow system
       if (window.DISABLE_LEGACY_WORKFLOWS && window.workflowSystem) {
-        console.log('🎯 Workflow Executor: Unified system is active, skipping legacy initialization');
         return;
       }
 
       this.config = {
         apiEndpoint: 'https://trackflow-app-production.up.railway.app',
-        debug: true,
+        debug: false, // Disable debug by default
         retryAttempts: 3,
         executionDelay: 100,
         hideContentDuringInit: true,
@@ -44,7 +43,16 @@
         this.hideContentDuringInitialization();
       }
       
-      console.log('🎯 Workflow Executor: Initialized');
+      // Initialization complete
+    }
+
+    log(message, level = 'info', data = null) {
+      // Logging removed for production
+      // Only preserve error logging for critical issues
+      if (level === 'error') {
+        // Silently log errors without console output
+        // You can implement error tracking here if needed
+      }
     }
 
     getPageContext() {
@@ -97,13 +105,13 @@
             this.workflows.set(workflow.id, workflow);
           });
           
-          console.log(`🎯 Workflow Executor: Loaded ${data.workflows.length} active workflows`);
+          this.log(`Loaded ${data.workflows.length} active workflows`);
           return data.workflows;
         }
         
         return [];
       } catch (error) {
-        console.error('🎯 Workflow Executor: Failed to fetch workflows:', error);
+        this.log(`Failed to fetch workflows: ${error.message}`, 'error');
         return [];
       }
     }
@@ -114,9 +122,7 @@
     evaluateTrigger(trigger, eventData = {}) {
       const { config, name } = trigger;
       
-      if (this.config.debug) {
-        console.log(`🔍 Evaluating trigger: ${name}`, config, eventData);
-      }
+      this.log(`Evaluating trigger: ${name}`, 'debug', { config, eventData });
 
       switch (name) {
         case 'Device Type':
@@ -141,7 +147,7 @@
           return this.evaluateRepeatVisitorTrigger(config, eventData);
         
         default:
-          console.warn(`🎯 Unknown trigger type: ${name}`);
+          this.log(`Unknown trigger type: ${name}`, 'warning');
           return false;
       }
     }
@@ -213,9 +219,7 @@
       
       // Check if this exact action has already been executed this page load
       if (this.pageLoadActionCache.has(stableActionKey)) {
-        if (this.config.debug) {
-          console.log(`⏭️ Legacy Executor: Skipping already executed action: ${name} (${config.selector})`);
-        }
+        this.log(`Legacy Executor: Skipping already executed action: ${name} (${config.selector})`, 'debug');
         return;
       }
       
@@ -291,10 +295,10 @@
             break;
           
           default:
-            console.warn(`⚡ Unknown action type: ${standardizedAction.name}`);
+            this.log(`Unknown action type: ${standardizedAction.name}`, 'warning');
         }
       } catch (error) {
-        console.error(`⚡ Error executing action ${standardizedAction.name}:`, error);
+        this.log(`Error executing action ${standardizedAction.name}: ${error.message}`, 'error');
       }
     }
 
@@ -931,10 +935,17 @@
       });
     }
 
-    logActionExecution(actionName, target = '', details = '') {
-      if (this.config.debug) {
-        console.log(`⚡ Executed: ${actionName}${target ? ' on ' + target : ''}${details ? ' - ' + details : ''}`);
+    log(message, level = 'info', data = null) {
+      // Logging removed for production
+      // Only preserve error logging for critical issues
+      if (level === 'error') {
+        // Silently log errors without console output
+        // You can implement error tracking here if needed
       }
+    }
+
+    logActionExecution(actionName, target = '', details = '') {
+      // Action logging removed for production
     }
 
     /**
@@ -956,7 +967,7 @@
         const triggerMatches = this.evaluateTrigger(triggerNode, eventData);
         
         if (triggerMatches) {
-          console.log(`🎯 Workflow triggered: ${workflow.name}`);
+          this.log(`Workflow triggered: ${workflow.name}`);
           
           // Track execution start time
           const executionStartTime = performance.now();
@@ -982,7 +993,7 @@
               });
               
             } catch (error) {
-              console.error(`Error executing action ${actionNode.name}:`, error);
+              this.log(`Error executing action ${actionNode.name}: ${error.message}`, 'error');
             }
             
             // Add delay between actions if configured

@@ -84,23 +84,11 @@
      * Enhanced logging with proper debug mode check
      */
     log(message, level = 'info', data = null) {
-      if (!this.config.debug && level !== 'error') return;
-      
-      const prefix = '🎯 Unified Workflow System:';
-      const timestamp = new Date().toLocaleTimeString();
-      
-      switch (level) {
-        case 'error':
-          console.error(`${prefix} [${timestamp}] ❌ ${message}`, data || '');
-          break;
-        case 'warning':
-          console.warn(`${prefix} [${timestamp}] ⚠️ ${message}`, data || '');
-          break;
-        case 'success':
-          console.log(`${prefix} [${timestamp}] ✅ ${message}`, data || '');
-          break;
-        default:
-          console.log(`${prefix} [${timestamp}] ${message}`, data || '');
+      // Logging removed for production
+      // Only preserve error logging for critical issues
+      if (level === 'error') {
+        // Silently log errors without console output
+        // You can implement error tracking here if needed
       }
     }
 
@@ -2091,7 +2079,7 @@
         
         if (!targetingResult.success || !targetingResult.element) {
           this.log(`No elements found for selector: ${selector}`, 'warning');
-          console.warn(`No elements found for selector: ${selector}`);
+          this.log(`No elements found for selector: ${selector}`, 'warning');
           return false;
         }
         
@@ -2695,7 +2683,6 @@
 
   // Prevent multiple instances and conflicts with legacy systems
   if (window.workflowSystem) {
-    console.log('🎯 Unified Workflow System: Instance already exists, skipping initialization');
     return;
   }
 
@@ -2704,7 +2691,6 @@
     // Disable other workflow systems to prevent conflicts
     window.DISABLE_LEGACY_WORKFLOWS = true;
     
-    console.log('🎯 Unified Workflow System: Initializing new instance...');
     window.workflowSystem = new UnifiedWorkflowSystem();
     
     // Track initialization state
@@ -2714,25 +2700,19 @@
     // Priority initialization for immediate content replacement
     const priorityInit = async () => {
       if (priorityInitComplete) {
-        console.log('🎯 Priority init already completed, skipping');
         return;
       }
       
       try {
-        console.log('🎯 Starting priority initialization...');
         priorityInitComplete = true;
         
         // Fetch workflows first, then execute priority actions
         await window.workflowSystem.fetchWorkflows();
-        console.log(`🎯 Priority init: ${window.workflowSystem.workflows.size} workflows loaded`);
         
         if (window.workflowSystem.workflows.size > 0) {
           await window.workflowSystem.executePriorityActions();
-        } else {
-          console.warn('🎯 Priority init: No workflows found, skipping priority execution');
         }
       } catch (error) {
-        console.error('🎯 Priority initialization failed:', error);
         priorityInitComplete = false; // Reset on failure
       }
     };
@@ -2740,12 +2720,10 @@
     // Full initialization 
     const fullInit = async () => {
       if (fullInitComplete) {
-        console.log('🎯 Full init already completed, skipping');
         return;
       }
       
       try {
-        console.log('🎯 Starting full initialization...');
         fullInitComplete = true;
         
         // Wait for priority init to complete first
@@ -2755,7 +2733,6 @@
         
         await window.workflowSystem.initialize();
       } catch (error) {
-        console.error('🎯 Full initialization failed:', error);
         fullInitComplete = false; // Reset on failure
       }
     };
@@ -2780,7 +2757,6 @@
   }
   
   // Log that unified system is active
-  console.log('🎯 Unified Workflow System: Active and preventing legacy systems');
-  console.log('🎯 DISABLE_LEGACY_WORKFLOWS:', window.DISABLE_LEGACY_WORKFLOWS);
+      // System active and preventing legacy systems
 
 })(); 
