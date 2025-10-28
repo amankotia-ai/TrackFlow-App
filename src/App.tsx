@@ -197,7 +197,7 @@ function AuthenticatedApp() {
     // Show main content based on active tab
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard workflows={workflows} />;
+        return <Dashboard workflows={workflows} onCreateWorkflow={handleCreateWorkflow} />;
       case 'workflows':
         return (
           <WorkflowList
@@ -227,7 +227,7 @@ function AuthenticatedApp() {
       case 'api-keys':
         return <ApiKeyManager />;
       default:
-        return <Dashboard workflows={workflows} />;
+        return <Dashboard workflows={workflows} onCreateWorkflow={handleCreateWorkflow} />;
     }
   };
 

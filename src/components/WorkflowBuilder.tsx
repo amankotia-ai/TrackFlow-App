@@ -13,7 +13,8 @@ import {
   Pause,
   Edit,
   AlertCircle,
-  AlertTriangle
+  AlertTriangle,
+  Database
 } from 'lucide-react';
 import { Workflow, WorkflowNode } from '../types/workflow';
 import NodeLibrary from './NodeLibrary';
@@ -21,6 +22,7 @@ import WorkflowCanvas from './WorkflowCanvas';
 import NodeConfigPanel from './NodeConfigPanel';
 import ScrapingResults from './ScrapingResults';
 import IntegrationModal from './IntegrationModal';
+import EnvironmentComponents from './EnvironmentComponents';
 import { useWebScraper } from '../hooks/useWebScraper';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useToast } from './Toast';
@@ -46,6 +48,7 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   const [isDone, setIsDone] = useState(false);
   const [url, setUrl] = useState(workflow.targetUrl || '');
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [showEnvironmentComponents, setShowEnvironmentComponents] = useState(false);
   
   // Change detection and save state management
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -490,6 +493,16 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
             </div>
           </div>
           
+          {/* Environment Components Button */}
+          <button
+            onClick={() => setShowEnvironmentComponents(true)}
+            className="flex items-center space-x-2 px-4 py-2 text-blue-700 bg-blue-50/90 backdrop-blur-sm border border-blue-200 hover:bg-blue-100 transition-colors font-medium text-sm rounded-lg shadow-sm"
+            title="Manage reusable components"
+          >
+            <Database className="w-4 h-4" />
+            <span>Components</span>
+          </button>
+          
           {/* Integration Button - Always visible */}
           <button
             onClick={() => setShowIntegrationModal(true)}
@@ -585,6 +598,12 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
         workflow={currentWorkflow}
         isOpen={showIntegrationModal}
         onClose={() => setShowIntegrationModal(false)}
+      />
+
+      {/* Environment Components Modal */}
+      <EnvironmentComponents
+        isOpen={showEnvironmentComponents}
+        onClose={() => setShowEnvironmentComponents(false)}
       />
     </div>
   );

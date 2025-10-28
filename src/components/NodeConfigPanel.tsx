@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { X, Target } from 'lucide-react';
+import { X, Target, Database } from 'lucide-react';
 import { WorkflowNode } from '../types/workflow';
 import { nodeTemplates } from '../data/nodeTemplates';
 import ElementSelectorButton from './ElementSelectorButton';
+import EnvironmentComponents from './EnvironmentComponents';
 import { ScrapedElement } from '../utils/scraperEnhanced';
+import { incrementComponentUsage } from '../services/environmentComponents';
 
 interface NodeConfigPanelProps {
   node: WorkflowNode;
@@ -20,6 +22,8 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
   // Local state for staging changes before saving
   const [localNode, setLocalNode] = useState<WorkflowNode>({ ...node });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showEnvComponents, setShowEnvComponents] = useState(false);
+  const [activeFieldKey, setActiveFieldKey] = useState<string | null>(null);
   
   // Debug logging
   console.log('Node:', node.name, node.type);
@@ -141,6 +145,21 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
                     return null;
                   })()}
                 </div>
+                
+                {/* Environment Components Button */}
+                <button
+                  onClick={() => {
+                    setActiveFieldKey(field.key);
+                    setShowEnvComponents(true);
+                  }}
+                  className="px-4 py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors whitespace-nowrap flex items-center space-x-2"
+                  title="Select from saved components"
+                  type="button"
+                >
+                  <Database className="w-4 h-4" />
+                  <span>Components</span>
+                </button>
+                
                 {scrapedElements.length > 0 && (
                   <ElementSelectorButton
                     elements={scrapedElements}
@@ -184,7 +203,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
               })()}
               {scrapedElements.length === 0 && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded border border-yellow-200">
-                  💡 Tip: Scrape a webpage first to enable element selection, or copy selectors from the DOM tree view
+                  💡 Tip: Scrape a webpage first to enable element selection, use saved components, or copy selectors from the DOM tree view
                 </p>
               )}
             </div>
@@ -415,6 +434,33 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
           </button>
         </div>
       </div>
+
+      {/* Environment Components Modal in Selection Mode */}
+      {showEnvComponents && (
+        <EnvironmentComponents
+          isOpen={showEnvComponents}
+          onClose={() => {
+            setShowEnvComponents(false);
+            setActiveFieldKey(null);
+          }}
+          selectionMode={true}
+          filterType="css_selector"
+          onSelectComponent={async (component) => {
+            if (activeFieldKey) {
+              handleConfigChange(activeFieldKey, component.value);
+              
+              // Increment usage count
+              try {
+                await incrementComponentUsage(component.id);
+              } catch (error) {
+                console.error('Failed to increment usage count:', error);
+              }
+            }
+            setShowEnvComponents(false);
+            setActiveFieldKey(null);
+          }}
+        />
+      )}
     </div>
   );
 };

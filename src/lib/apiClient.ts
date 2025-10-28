@@ -211,29 +211,54 @@ class ApiClient {
   }
   
   /**
-   * Get current user session
+   * Get current user session with retry logic
    */
   async getCurrentSession(): Promise<ApiResponse> {
     try {
-      const { data, error } = await supabase.auth.getSession();
+      // Try to get session with retry logic for network failures
+      let lastError: any = null;
+      const maxAttempts = 2;
       
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        };
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            // Don't retry on auth errors (invalid session, etc.)
+            return {
+              success: false,
+              error: error.message,
+              timestamp: new Date().toISOString(),
+            };
+          }
+          
+          return {
+            success: true,
+            data: data.session,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (err: any) {
+          lastError = err;
+          
+          // Only retry on network errors
+          if (attempt < maxAttempts - 1 && (err.message?.includes('network') || err.message?.includes('fetch'))) {
+            console.warn(`Session fetch failed (attempt ${attempt + 1}), retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          
+          throw err;
+        }
       }
       
-      return {
-        success: true,
-        data: data.session,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
+      throw lastError;
+      
+    } catch (error: unknown) {
+      const err = error as any;
+      console.error('Failed to get session:', err);
       return {
         success: false,
-        error: error.message || 'Failed to get session',
+        error: err.message || 'Failed to get session',
         timestamp: new Date().toISOString(),
       };
     }

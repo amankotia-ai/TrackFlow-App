@@ -1,27 +1,34 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Activity, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Pause,
-  TrendingUp,
+  CheckCircle,
   Users,
   Zap,
   Plus,
   RefreshCw,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Smartphone
 } from 'lucide-react';
-import { AnalyticsService, UserStats, WorkflowExecution } from '../services/analyticsService';
+import { AnalyticsService, WorkflowExecution } from '../services/analyticsService';
 import { Workflow } from '../types/workflow';
+import EnhancedStatCard from './EnhancedStatCard';
+import TopPerformers from './TopPerformers';
+import EnhancedExecutionList from './EnhancedExecutionList';
+import {
+  calculateTodayStats,
+  groupExecutionsByTime,
+  getDeviceBreakdown,
+  getTopPerformers,
+  getUniqueVisitorCount,
+  getUniquePagesCount
+} from '../utils/dashboardHelpers';
 
 interface DashboardProps {
   workflows?: Workflow[];
+  onCreateWorkflow?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
-  const [userStats, setUserStats] = useState<UserStats | null>(null);
+const Dashboard: React.FC<DashboardProps> = ({ workflows = [], onCreateWorkflow }) => {
   const [recentExecutions, setRecentExecutions] = useState<WorkflowExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,16 +51,12 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
           }
         }, 20000);
 
-        // Load data using the new AnalyticsService
-        const [stats, executions] = await Promise.all([
-          AnalyticsService.getUserStats(),
-          AnalyticsService.getWorkflowExecutions(undefined, 10)
-        ]);
+        // Load data using the new AnalyticsService - get more executions for analysis
+        const executions = await AnalyticsService.getWorkflowExecutions(undefined, 100); // Get more for better analytics
         
         clearTimeout(loadingTimeout);
 
         if (isMountedRef.current) {
-          setUserStats(stats);
           setRecentExecutions(executions);
         }
       } catch (err) {
@@ -76,132 +79,30 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
     };
   }, []);
 
-  // Helper function to get workflow name by ID
-  const getWorkflowName = (workflowId: string): string => {
-    const workflow = workflows.find(w => w.id === workflowId);
-    return workflow ? workflow.name : `Playbook ${workflowId.slice(-8)}`;
-  };
 
-  const formatNumber = (num: number): string => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    } else if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toString();
-  };
-
-  const getStatsData = () => {
-    // Calculate stats from workflows if userStats is not available
-    const totalExecutions = workflows.reduce((sum, workflow) => sum + workflow.executions, 0);
-    const activeWorkflows = workflows.filter(w => w.status === 'active').length;
-    const totalWorkflows = workflows.length;
-
-    // Use actual workflow data if userStats is not available or seems outdated
-    const useWorkflowData = !userStats || (userStats.total_workflows === 0 && totalWorkflows > 0);
-
-    if (useWorkflowData) {
-      return [
-        { 
-          label: 'Total Playbooks', 
-          value: totalWorkflows.toString(), 
-          change: `${activeWorkflows} active`, 
-          changeType: 'positive' as const,
-          icon: Activity 
-        },
-        { 
-          label: 'Active Playbooks', 
-          value: activeWorkflows.toString(), 
-          change: `${totalWorkflows - activeWorkflows} inactive`, 
-          changeType: 'positive' as const,
-          icon: CheckCircle 
-        },
-        { 
-          label: 'Total Executions', 
-          value: formatNumber(totalExecutions), 
-          change: totalExecutions > 0 ? 'Real execution data' : 'No executions yet', 
-          changeType: totalExecutions > 0 ? 'positive' : 'negative' as const,
-          icon: Zap 
-        },
-        { 
-          label: 'Avg. per Playbook', 
-          value: totalWorkflows > 0 ? Math.round(totalExecutions / totalWorkflows).toString() : '0', 
-          change: 'executions per playbook', 
-          changeType: 'positive' as const,
-          icon: TrendingUp 
-        }
-      ];
+  // Calculate dashboard analytics using helper functions
+  const dashboardData = useMemo(() => {
+    if (!recentExecutions.length) {
+      return {
+        todayStats: { count: 0, successRate: 0, avgTime: 0, errorCount: 0 },
+        groupedExecutions: { recent: [], last30: [], earlier: [] },
+        deviceBreakdown: { mobile: 0, desktop: 0, tablet: 0, unknown: 0 },
+        topPerformers: [],
+        uniqueVisitors: 0,
+        uniquePages: 0
+      };
     }
 
-    // Use userStats if available and seems current
-    return [
-      { 
-        label: 'Total Playbooks', 
-        value: userStats.total_workflows.toString(), 
-        change: `${userStats.active_workflows} active`, 
-        changeType: 'positive' as const,
-        icon: Activity 
-      },
-      { 
-        label: 'Active Playbooks', 
-        value: userStats.active_workflows.toString(), 
-        change: `${userStats.total_workflows - userStats.active_workflows} inactive`, 
-        changeType: 'positive' as const,
-        icon: CheckCircle 
-      },
-      { 
-        label: 'Total Executions', 
-        value: formatNumber(userStats.total_executions), 
-        change: `${formatNumber(userStats.total_events)} events tracked`, 
-        changeType: 'positive' as const,
-        icon: Zap 
-      },
-      { 
-        label: 'Success Rate', 
-        value: `${userStats.avg_success_rate.toFixed(1)}%`, 
-        change: userStats.avg_success_rate >= 90 ? 'Excellent' : userStats.avg_success_rate >= 70 ? 'Good' : 'Needs improvement', 
-        changeType: userStats.avg_success_rate >= 90 ? 'positive' : 'negative' as const,
-        icon: TrendingUp 
-      }
-    ];
-  };
+    return {
+      todayStats: calculateTodayStats(recentExecutions),
+      groupedExecutions: groupExecutionsByTime(recentExecutions),
+      deviceBreakdown: getDeviceBreakdown(recentExecutions),
+      topPerformers: getTopPerformers(recentExecutions, workflows, 3),
+      uniqueVisitors: getUniqueVisitorCount(recentExecutions),
+      uniquePages: getUniquePagesCount(recentExecutions)
+    };
+  }, [recentExecutions, workflows]);
 
-  const stats = getStatsData();
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'success': return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case 'error': return <XCircle className="w-4 h-4 text-red-600" />;
-      case 'timeout': return <Clock className="w-4 h-4 text-yellow-600" />;
-      default: return <Pause className="w-4 h-4 text-secondary-400" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'success': return 'text-green-600 bg-green-50';
-      case 'error': return 'text-red-600 bg-red-50';
-      case 'timeout': return 'text-yellow-600 bg-yellow-50';
-      default: return 'text-secondary-600 bg-secondary-50';
-    }
-  };
-
-  const formatExecutionTime = (timeMs: number | null): string => {
-    if (!timeMs) return 'N/A';
-    if (timeMs < 1000) return `${timeMs}ms`;
-    return `${(timeMs / 1000).toFixed(1)}s`;
-  };
-
-  const formatTimeAgo = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    return `${Math.floor(diffInSeconds / 86400)} days ago`;
-  };
 
   // Show loading state
   if (loading) {
@@ -249,11 +150,17 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
             
             {/* Action Buttons */}
             <div className="flex items-center space-x-2">
-              <button className="flex items-center space-x-2 px-4 py-2 text-secondary-700 bg-white border border-secondary-300 hover:bg-secondary-50 transition-colors font-medium text-sm rounded-lg">
+              <button 
+                onClick={() => window.location.reload()}
+                className="flex items-center space-x-2 px-4 py-2 text-secondary-700 bg-white border border-secondary-300 hover:bg-secondary-50 transition-colors font-medium text-sm rounded-lg"
+              >
                 <RefreshCw className="w-4 h-4" />
                 <span>Refresh</span>
               </button>
-              <button className="flex items-center space-x-2 px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium text-sm rounded-lg">
+              <button 
+                onClick={onCreateWorkflow}
+                className="flex items-center space-x-2 px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium text-sm rounded-lg"
+              >
                 <Plus className="w-4 h-4" />
                 <span>New Playbook</span>
               </button>
@@ -262,78 +169,85 @@ const Dashboard: React.FC<DashboardProps> = ({ workflows = [] }) => {
         </div>
 
         {/* Main Content */}
-        <div className="p-8">
-          {/* Stats Grid - Clean design with borders instead of shadows */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {stats.map((stat) => (
-              <div key={stat.label} className="bg-white p-6 rounded-lg border border-secondary-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-primary-50 rounded-lg">
-                    <stat.icon className="w-6 h-6 text-primary-600" />
-                  </div>
-                  <span className={`text-sm font-medium ${
-                    stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {stat.change}
-                  </span>
-                </div>
-                <h3 className="text-2xl font-bold text-secondary-900 tracking-tight mb-1">{stat.value}</h3>
-                <p className="text-sm text-secondary-600">{stat.label}</p>
-              </div>
-            ))}
+        <div className="p-8 space-y-6">
+          {/* Enhanced Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <EnhancedStatCard
+              title="Executions Today"
+              value={dashboardData.todayStats.count}
+              icon={Zap}
+              subMetric={dashboardData.todayStats.errorCount > 0 
+                ? `⚠️ ${dashboardData.todayStats.errorCount} errors to review`
+                : '✓ All systems running smoothly'}
+              trend={dashboardData.todayStats.yesterdayCount !== undefined ? {
+                value: dashboardData.todayStats.trendPercentage || 0,
+                label: 'vs yesterday'
+              } : undefined}
+            />
+            
+            <EnhancedStatCard
+              title="Success Rate (24h)"
+              value={`${dashboardData.todayStats.successRate}%`}
+              icon={CheckCircle}
+              subMetric={dashboardData.todayStats.successRate >= 95 
+                ? '🎯 Excellent performance'
+                : dashboardData.todayStats.successRate >= 80 
+                ? '👍 Good performance'
+                : '⚠️ Needs attention'}
+            />
+            
+            <EnhancedStatCard
+              title="Unique Visitors"
+              value={dashboardData.uniqueVisitors}
+              icon={Users}
+              subMetric={`${dashboardData.uniquePages} unique pages`}
+            />
+            
+            <EnhancedStatCard
+              title="Top Device"
+              value={(() => {
+                const { mobile, desktop, tablet } = dashboardData.deviceBreakdown;
+                const total = mobile + desktop + tablet;
+                if (total === 0) return 'No data';
+                if (mobile > desktop && mobile > tablet) {
+                  return `${Math.round((mobile / total) * 100)}%`;
+                }
+                if (desktop > mobile && desktop > tablet) {
+                  return `${Math.round((desktop / total) * 100)}%`;
+                }
+                return `${Math.round((tablet / total) * 100)}%`;
+              })()}
+              icon={Smartphone}
+              subMetric={(() => {
+                const { mobile, desktop, tablet } = dashboardData.deviceBreakdown;
+                const total = mobile + desktop + tablet;
+                if (total === 0) return 'No activity yet';
+                if (mobile > desktop && mobile > tablet) {
+                  return `Mobile (Desktop: ${Math.round((desktop / total) * 100)}%)`;
+                }
+                if (desktop > mobile && desktop > tablet) {
+                  return `Desktop (Mobile: ${Math.round((mobile / total) * 100)}%)`;
+                }
+                return `Tablet (Mobile: ${Math.round((mobile / total) * 100)}%)`;
+              })()}
+            />
           </div>
 
-          {/* Recent Executions - Table with border instead of shadow */}
-          <div className="bg-white rounded-lg border border-secondary-200">
-            <div className="p-6 border-b border-secondary-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-secondary-900 tracking-tight">Recent Personalizations</h2>
-                  <p className="text-sm text-secondary-600 mt-1">Latest workflow executions and their performance</p>
-                </div>
-                <button className="text-primary-600 hover:text-primary-700 text-sm font-medium transition-colors">
-                  View All
-                </button>
+          {/* Top Performers */}
+          <TopPerformers performers={dashboardData.topPerformers} />
+
+          {/* Enhanced Execution List with Time Grouping */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-secondary-900 tracking-tight">Recent Activity</h2>
+                <p className="text-sm text-secondary-600 mt-1">Latest playbook executions and their performance</p>
               </div>
             </div>
-            
-            {/* Table Header */}
-            <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-secondary-50 text-sm font-medium text-secondary-700 tracking-tight border-b border-secondary-200">
-              <div className="col-span-1 flex items-center">Status</div>
-              <div className="col-span-4 flex items-center">Playbook</div>
-              <div className="col-span-3 flex items-center">Execution Time</div>
-              <div className="col-span-2 flex items-center">Duration</div>
-              <div className="col-span-2 flex items-center">Actions</div>
-            </div>
-            
-            {/* Table Rows */}
-            <div className="divide-y divide-secondary-200">
-              {recentExecutions.map((execution) => (
-                <div key={execution.id} className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-secondary-50 transition-colors items-center">
-                  <div className="col-span-1 flex items-center">
-                    <div className={`w-3 h-3 rounded-full ${
-                      execution.status === 'success' ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                  </div>
-                  <div className="col-span-4">
-                    <h3 className="font-medium text-secondary-900">{getWorkflowName(execution.workflow_id)}</h3>
-                    <p className="text-sm text-secondary-600">{execution.page_url || 'Unknown page'}</p>
-                  </div>
-                  <div className="col-span-3 flex items-center">
-                    <span className="text-sm text-secondary-900">{formatTimeAgo(execution.executed_at)}</span>
-                  </div>
-                  <div className="col-span-2 flex items-center">
-                    <span className="text-sm text-secondary-600">{formatExecutionTime(execution.execution_time_ms)}</span>
-                  </div>
-                  <div className="col-span-2 flex items-center">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(execution.status)}`}>
-                      {getStatusIcon(execution.status)}
-                      <span className="ml-1 capitalize">{execution.status}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <EnhancedExecutionList 
+              groupedExecutions={dashboardData.groupedExecutions} 
+              workflows={workflows}
+            />
           </div>
         </div>
       </div>

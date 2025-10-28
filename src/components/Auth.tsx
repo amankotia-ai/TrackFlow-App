@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react'
+import { useToast } from './Toast'
+import { Mail, Lock, User, Loader2 } from 'lucide-react'
 
 export default function Auth() {
   const [isSignUp, setIsSignUp] = useState(false)
@@ -8,16 +9,13 @@ export default function Auth() {
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
 
   const { signIn, signUp, resetPassword } = useAuth()
+  const { showToast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    setMessage(null)
 
     try {
       if (isSignUp) {
@@ -26,19 +24,27 @@ export default function Auth() {
         })
         
         if (error) {
-          setError(error.message)
+          showToast(error, 'error')
         } else {
-          setMessage('Check your email for the confirmation link!')
+          showToast('Account created! Check your email for the confirmation link.', 'success')
+          // Switch to sign in mode after successful signup
+          setTimeout(() => {
+            setIsSignUp(false)
+            setPassword('')
+            setFullName('')
+          }, 2000)
         }
       } else {
         const { error } = await signIn(email, password)
         
         if (error) {
-          setError(error.message)
+          showToast(error, 'error')
+        } else {
+          showToast('Welcome back! Signing you in...', 'success')
         }
       }
-    } catch (err) {
-      setError('An unexpected error occurred')
+    } catch (err: any) {
+      showToast(err.message || 'An unexpected error occurred', 'error')
     } finally {
       setLoading(false)
     }
@@ -46,19 +52,18 @@ export default function Auth() {
 
   const handleResetPassword = async () => {
     if (!email) {
-      setError('Please enter your email address first')
+      showToast('Please enter your email address first', 'warning')
       return
     }
 
     setLoading(true)
-    setError(null)
     
     const { error } = await resetPassword(email)
     
     if (error) {
-      setError(error.message)
+      showToast(error, 'error')
     } else {
-      setMessage('Check your email for the password reset link!')
+      showToast('Password reset email sent! Check your inbox.', 'success')
     }
     
     setLoading(false)
@@ -154,20 +159,6 @@ export default function Auth() {
             </div>
           </div>
 
-          {/* Error/Success Messages */}
-          {error && (
-            <div className="flex items-center space-x-2 text-red-600 text-sm">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {message && (
-            <div className="text-green-600 text-sm text-center">
-              {message}
-            </div>
-          )}
-
           {/* Submit Button */}
           <div>
             <button
@@ -189,8 +180,8 @@ export default function Auth() {
               type="button"
               onClick={() => {
                 setIsSignUp(!isSignUp)
-                setError(null)
-                setMessage(null)
+                setPassword('')
+                setFullName('')
               }}
               className="text-primary-600 hover:text-primary-500 text-sm font-medium"
             >

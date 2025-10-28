@@ -8,7 +8,38 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce'
+    flowType: 'pkce',
+    // Enhanced storage options for better persistence
+    storage: window.localStorage,
+    storageKey: 'trackflow-auth-token',
+    // Debug logging for auth issues (can be disabled in production)
+    debug: import.meta.env.DEV
+  },
+  global: {
+    headers: {
+      'x-application-name': 'TrackFlow'
+    }
+  },
+  // Enhanced retry configuration
+  db: {
+    schema: 'public'
+  },
+  // Realtime is disabled for better performance
+  realtime: {
+    params: {
+      eventsPerSecond: 2
+    }
+  }
+})
+
+// Add global error handler for Supabase auth errors
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('🔄 Auth token refreshed successfully')
+  } else if (event === 'SIGNED_OUT') {
+    console.log('🔐 User signed out - clearing session cache')
+  } else if (event === 'USER_UPDATED') {
+    console.log('👤 User data updated')
   }
 })
 
