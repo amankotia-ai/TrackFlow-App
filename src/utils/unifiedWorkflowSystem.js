@@ -77,7 +77,16 @@
         '.cancel-btn'
       ];
       
-      this.log('🎯 Unified Workflow System: Initialized with modal loop prevention');
+      // Journey tracking integration (cookie-free)
+      this.journeyTracker = window.journeyTracker || null;
+      if (!this.journeyTracker && window.JourneyTracker) {
+        this.journeyTracker = new window.JourneyTracker({
+          debug: this.config.debug,
+          apiEndpoint: this.config.apiEndpoint
+        });
+      }
+      
+      this.log('🎯 Unified Workflow System: Initialized with modal loop prevention and journey tracking');
     }
 
     /**
@@ -521,27 +530,23 @@
         }, 500); // Increased throttle to 500ms
       });
 
-      // Time on page tracking - much less frequent and with caching
+      // Time on page tracking - check every second for accuracy
       let timeOnPage = 0;
       const timeInterval = setInterval(() => {
-        timeOnPage += 10; // Increment by 10 seconds
+        timeOnPage += 1; // Increment by 1 second
         const now = Date.now();
         
-        // Only check time-based triggers every 30 seconds
-        if (now - this.lastTimeCheck < 30000) {
-          return;
-        }
-        this.lastTimeCheck = now;
-        
-        // Only trigger on meaningful time milestones (30s, 60s, 120s, etc.)
-        if (timeOnPage === 30 || timeOnPage === 60 || timeOnPage === 120 || timeOnPage === 300) {
+        // Check if we've hit any meaningful milestone
+        // We check every second to ensure we don't miss any thresholds
+        const milestones = [5, 10, 15, 30, 45, 60, 90, 120, 180, 240, 300];
+        if (milestones.includes(timeOnPage)) {
           this.handleEvent({
             eventType: 'time_on_page',
             timeOnPage,
             timestamp: now
           });
         }
-      }, 10000); // Check every 10 seconds instead of every second
+      }, 1000); // Check every second for accurate tracking
 
       // Click tracking - single execution per click with close button detection
       document.addEventListener('click', (event) => {
@@ -997,6 +1002,15 @@
      * Handle runtime events
      */
     async handleEvent(eventData) {
+      // Track event in journey tracker (cookie-free)
+      if (this.journeyTracker) {
+        this.journeyTracker.trackEvent({
+          type: eventData.eventType,
+          target: eventData.elementSelector || eventData.eventType,
+          data: eventData
+        });
+      }
+      
       await this.processWorkflows(eventData);
     }
 
@@ -1177,6 +1191,10 @@
           
         case 'Geolocation':
           shouldTrigger = this.evaluateGeolocationTrigger(config, eventData);
+          break;
+          
+        case 'User Journey':
+          shouldTrigger = this.evaluateUserJourneyTrigger(config, eventData);
           break;
           
         default:
@@ -1515,6 +1533,58 @@
 
       this.log(`🔄 Repeat visitor: Threshold not met. ${currentVisitCount} < ${visitCount} visits`, 'info');
       return false;
+    }
+
+    /**
+     * Evaluate user journey trigger (cookie-free journey tracking)
+     */
+    evaluateUserJourneyTrigger(config, eventData) {
+      if (!this.journeyTracker) {
+        this.log('⚠️ Journey tracker not available', 'warning');
+        return false;
+      }
+
+      const { pages, order = 'any' } = config;
+      
+      if (!pages || pages.length === 0) {
+        this.log('⚠️ No pages configured for journey trigger', 'warning');
+        return false;
+      }
+
+      // Parse pages (could be textarea with newlines or array)
+      const pageArray = typeof pages === 'string' 
+        ? pages.split('\n').map(p => p.trim()).filter(p => p)
+        : pages;
+
+      if (pageArray.length === 0) {
+        this.log('⚠️ No valid pages after parsing', 'warning');
+        return false;
+      }
+
+      const pattern = {
+        pages: pageArray,
+        order: order || 'any'
+      };
+
+      const matches = this.journeyTracker.matchesJourneyPattern(pattern);
+      
+      if (matches) {
+        this.log(`✅ Journey pattern matched: ${pageArray.join(' → ')}`, 'success');
+        
+        // Get journey analytics for context
+        const analytics = this.journeyTracker.getAnalytics();
+        this.log(`📊 Journey analytics:`, 'info', {
+          intentScore: analytics.intentScore,
+          intentLevel: analytics.intentLevel,
+          pageCount: analytics.pageCount,
+          sessionDuration: analytics.sessionDuration,
+          pagePaths: analytics.pagePaths
+        });
+      } else {
+        this.log(`❌ Journey pattern not matched. Required: ${pageArray.join(', ')}`, 'info');
+      }
+
+      return matches;
     }
 
     /**

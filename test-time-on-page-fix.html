@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time on Page Trigger Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 40px;
+      max-width: 1000px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #667eea;
+      margin: 0 0 10px 0;
+    }
+    
+    .status {
+      background: #f7fafc;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid #667eea;
+    }
+    
+    .timer {
+      font-size: 48px;
+      font-weight: bold;
+      color: #667eea;
+      text-align: center;
+      margin: 30px 0;
+    }
+    
+    .log {
+      background: #1a202c;
+      color: #a0aec0;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    
+    .log-entry {
+      margin: 5px 0;
+      padding: 5px;
+      border-left: 3px solid transparent;
+    }
+    
+    .log-entry.info {
+      border-color: #4299e1;
+      color: #90cdf4;
+    }
+    
+    .log-entry.success {
+      border-color: #48bb78;
+      color: #9ae6b4;
+    }
+    
+    .log-entry.warning {
+      border-color: #ed8936;
+      color: #fbd38d;
+    }
+    
+    .log-entry.error {
+      border-color: #f56565;
+      color: #fc8181;
+    }
+    
+    .milestone {
+      background: #e6fffa;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 6px;
+      border-left: 4px solid #319795;
+    }
+    
+    .milestone.triggered {
+      background: #c6f6d5;
+      border-color: #38a169;
+      font-weight: bold;
+    }
+    
+    .test-info {
+      background: #fef5e7;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #f39c12;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⏱️ Time on Page Trigger Test</h1>
+    <p>Testing the fixed time on page trigger implementation</p>
+    
+    <div class="test-info">
+      <strong>📋 Test Details:</strong><br>
+      This page directly monitors time_on_page events from the UnifiedWorkflowSystem.<br>
+      Milestones will trigger at: 5s, 10s, 15s, 30s, 45s, 60s
+    </div>
+    
+    <div class="status">
+      <strong>Time on Page:</strong>
+      <div class="timer" id="timer">0s</div>
+    </div>
+    
+    <div>
+      <h3>Milestones:</h3>
+      <div class="milestone" id="milestone-5">⏱️ 5 seconds - Waiting...</div>
+      <div class="milestone" id="milestone-10">⏱️ 10 seconds - Waiting...</div>
+      <div class="milestone" id="milestone-15">⏱️ 15 seconds - Waiting...</div>
+      <div class="milestone" id="milestone-30">⏱️ 30 seconds - Waiting...</div>
+      <div class="milestone" id="milestone-45">⏱️ 45 seconds - Waiting...</div>
+      <div class="milestone" id="milestone-60">⏱️ 60 seconds - Waiting...</div>
+    </div>
+    
+    <div class="log" id="log"></div>
+  </div>
+  
+  <script src="src/utils/unifiedWorkflowSystem.js"></script>
+  <script>
+    let startTime = Date.now();
+    let triggeredMilestones = new Set();
+    
+    // Update timer display
+    setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      document.getElementById('timer').textContent = elapsed + 's';
+    }, 100);
+    
+    function log(message, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      const timestamp = new Date().toLocaleTimeString();
+      entry.textContent = `[${timestamp}] ${message}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+    
+    function markMilestoneTriggered(seconds) {
+      const milestone = document.getElementById(`milestone-${seconds}`);
+      if (milestone && !triggeredMilestones.has(seconds)) {
+        milestone.classList.add('triggered');
+        milestone.textContent = `✅ ${seconds} seconds - TRIGGERED!`;
+        triggeredMilestones.add(seconds);
+        log(`✅ Milestone ${seconds}s triggered successfully!`, 'success');
+      }
+    }
+    
+    // Initialize the workflow system
+    log('Initializing UnifiedWorkflowSystem...', 'info');
+    
+    const workflowSystem = new UnifiedWorkflowSystem({
+      debug: true,
+      apiEndpoint: 'https://trackflow-app-production.up.railway.app'
+    });
+    
+    // Hook into the handleEvent method to intercept time_on_page events
+    const originalHandleEvent = workflowSystem.handleEvent.bind(workflowSystem);
+    workflowSystem.handleEvent = function(event) {
+      if (event.eventType === 'time_on_page') {
+        const seconds = event.timeOnPage;
+        log(`🔔 time_on_page event detected: ${seconds}s`, 'info');
+        
+        // Check if this is a milestone we're tracking
+        if ([5, 10, 15, 30, 45, 60].includes(seconds)) {
+          markMilestoneTriggered(seconds);
+        }
+      }
+      return originalHandleEvent(event);
+    };
+    
+    // Load an empty workflow to initialize the system
+    workflowSystem.loadWorkflows([{
+      id: 'test-workflow',
+      name: 'Test Workflow',
+      active: true,
+      nodes: [],
+      connections: []
+    }]);
+    
+    log('✅ System initialized', 'success');
+    log('⏳ Waiting for time_on_page events...', 'info');
+    log('Expected milestones: 5s, 10s, 15s, 30s, 45s, 60s', 'info');
+    
+    // Also log when the interval should be firing (every 1 second)
+    let lastLogTime = Date.now();
+    setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const now = Date.now();
+      
+      // Log every 5 seconds to show the timer is working
+      if (now - lastLogTime >= 5000) {
+        log(`⏰ Timer check: ${elapsed}s elapsed`, 'info');
+        lastLogTime = now;
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
