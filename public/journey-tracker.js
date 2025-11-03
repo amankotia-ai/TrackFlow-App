@@ -3,6 +3,14 @@
  * Uses only sessionStorage, localStorage, and in-memory state
  * 100% GDPR-friendly, no cookies required
  * 
+ * Usage:
+ * const tracker = new CookieFreeJourneyTracker({
+ *   apiEndpoint: 'https://your-domain.com/api', // Base API URL (not /api/journey)
+ *   enableTracking: true,
+ *   debug: true
+ * });
+ * // Note: Tracker auto-initializes, no need to call .initialize()
+ * 
  * Storage Strategy:
  * - sessionStorage: Current journey (expires when browser closes)
  * - localStorage: Visit count, first visit date, UTM attribution
@@ -38,6 +46,15 @@
       this.trackPageVisit();
       
       this.log('✅ Cookie-Free Journey Tracker initialized');
+    }
+
+    /**
+     * Initialize method (for backward compatibility)
+     * The tracker auto-initializes in the constructor, so this method is not needed
+     */
+    initialize() {
+      this.log('ℹ️ .initialize() called but not needed - tracker already initialized in constructor', 'warning');
+      return this; // Allow chaining
     }
 
     log(message, level = 'info', data = null) {
@@ -488,9 +505,14 @@
 
     /**
      * Send journey update to analytics endpoint
+     * Note: apiEndpoint should be base URL (e.g., 'https://domain.com/api')
+     * The method will append '/journey-update' to create the full path
      */
     async sendJourneyUpdate(isFinal = false) {
-      if (!this.config.apiEndpoint) return;
+      if (!this.config.apiEndpoint) {
+        this.log('ℹ️ API endpoint not configured, skipping journey update', 'info');
+        return;
+      }
       
       try {
         const analytics = this.getAnalytics();
@@ -513,18 +535,35 @@
           isFinal
         };
 
+        const apiUrl = this.config.apiEndpoint + '/journey-update';
+        this.log(`📤 Sending journey update to: ${apiUrl}`, 'info');
+
         // Use sendBeacon for final update to ensure it goes through
         if (isFinal && navigator.sendBeacon) {
           const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-          navigator.sendBeacon(this.config.apiEndpoint + '/journey-update', blob);
+          const sent = navigator.sendBeacon(apiUrl, blob);
+          this.log(sent ? '✅ Final journey update sent via sendBeacon' : '⚠️ sendBeacon failed', sent ? 'success' : 'warning');
         } else {
           // Regular fetch for periodic updates
-          fetch(this.config.apiEndpoint + '/journey-update', {
+          fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
             keepalive: true
-          }).catch(err => {
+          })
+          .then(response => {
+            if (!response.ok) {
+              if (response.status === 404) {
+                this.log(`❌ API endpoint not found (404): ${apiUrl}. Check that apiEndpoint is set to base URL (e.g., 'https://domain.com/api' not 'https://domain.com/api/journey')`, 'error');
+              } else {
+                this.log(`❌ Journey update failed with status ${response.status}`, 'error');
+              }
+            } else {
+              this.log('✅ Journey update sent successfully', 'success');
+            }
+            return response.json();
+          })
+          .catch(err => {
             this.log('❌ Failed to send journey update: ' + err.message, 'error');
           });
         }
@@ -696,7 +735,7 @@
   if (!window.DISABLE_AUTO_JOURNEY_TRACKING) {
     window.journeyTracker = new CookieFreeJourneyTracker({
       debug: false,
-      apiEndpoint: window.TRACKFLOW_API_ENDPOINT || 'https://trackflow-app-production.up.railway.app/api'
+      apiEndpoint: window.TRACKFLOW_API_ENDPOINT || null // Set to null by default, or configure manually
     });
   }
   
