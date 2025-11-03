@@ -139,6 +139,8 @@ app.get('/api/health', (req, res) => {
       workflows: 'GET /api/workflows/active',
       unified_system: 'GET /api/unified-workflow-system.js',
       anti_flicker: 'GET /api/anti-flicker.js',
+      journey_tracker: 'GET /journey-tracker.js',
+      journey_update: 'POST /api/journey-update',
       analytics: 'POST /api/analytics/track',
       edge_function: 'https://xlzihfstoqdbgdegqkoi.supabase.co/functions/v1/track-execution'
     }
@@ -291,6 +293,42 @@ app.get('/api/anti-flicker.js', (req, res) => {
   } catch (error) {
     console.error('❌ Anti-flicker script not found:', error.message);
     res.status(404).send('// Anti-flicker script not found');
+  }
+});
+
+// Serve journey tracker script (cookie-free analytics)
+app.get('/journey-tracker.js', (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const journeyTrackerScript = fs.readFileSync(path.join(__dirname, 'public/journey-tracker.js'), 'utf8');
+    console.log('🛤️ Serving journey tracker script to:', req.get('origin') || req.ip);
+    res.send(journeyTrackerScript);
+  } catch (error) {
+    console.error('❌ Journey tracker script not found:', error.message);
+    res.status(404).send('// Journey tracker script not found');
+  }
+});
+
+// Also serve from /api/ path for consistency
+app.get('/api/journey-tracker.js', (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const journeyTrackerScript = fs.readFileSync(path.join(__dirname, 'public/journey-tracker.js'), 'utf8');
+    console.log('🛤️ Serving journey tracker script (API path) to:', req.get('origin') || req.ip);
+    res.send(journeyTrackerScript);
+  } catch (error) {
+    console.error('❌ Journey tracker script not found:', error.message);
+    res.status(404).send('// Journey tracker script not found');
   }
 });
 
@@ -737,6 +775,182 @@ app.all('/api/hierarchical-scrape', async (req, res) => {
   }
 });
 
+// Journey tracking endpoint (cookie-free analytics)
+app.post('/api/journey-update', async (req, res) => {
+  try {
+    const { sessionId, analytics, journey, isFinal } = req.body;
+    
+    if (!sessionId || !analytics) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: sessionId and analytics'
+      });
+    }
+
+    console.log(`📊 Journey update received: ${sessionId} (${analytics.intentLevel} intent, ${analytics.pageCount} pages)`);
+
+    // Call Supabase function to update journey
+    const { data, error } = await supabaseServiceRole.rpc('update_journey_from_client', {
+      p_session_id: sessionId,
+      p_analytics: analytics,
+      p_pages: journey?.pages || null,
+      p_is_final: isFinal || false
+    });
+
+    if (error) {
+      console.error('❌ Error updating journey in Supabase:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update journey',
+        details: error.message
+      });
+    }
+
+    console.log(`✅ Journey updated successfully: ${data}`);
+
+    res.json({
+      success: true,
+      journeyId: data,
+      sessionId,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Journey tracking error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Journey analytics endpoint - get journey data
+app.get('/api/journey/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const { data, error } = await supabase
+      .from('user_journeys')
+      .select(`
+        *,
+        journey_pages(
+          id,
+          page_path,
+          page_title,
+          time_on_page_ms,
+          scroll_depth,
+          interaction_count,
+          page_sequence,
+          entered_at
+        ),
+        journey_events(
+          id,
+          event_type,
+          event_target,
+          is_intent_signal,
+          occurred_at
+        )
+      `)
+      .eq('session_id', sessionId)
+      .single();
+
+    if (error) {
+      return res.status(404).json({
+        success: false,
+        error: 'Journey not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      journey: data,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching journey:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+// Journey analytics summary endpoint
+app.get('/api/journey-analytics/summary', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const { data, error } = await supabase.rpc('calculate_journey_analytics', {
+      p_start_date: startDate || new Date().toISOString().split('T')[0],
+      p_end_date: endDate || null
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      analytics: data,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching journey analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch analytics'
+    });
+  }
+});
+
+// High-intent journeys endpoint (for sales teams)
+app.get('/api/journey-analytics/high-intent', async (req, res) => {
+  try {
+    const { limit = 50, minScore = 0.7 } = req.query;
+
+    const { data, error } = await supabase
+      .from('user_journeys')
+      .select(`
+        session_id,
+        intent_score,
+        intent_level,
+        page_count,
+        total_time_ms,
+        landing_page,
+        utm_source,
+        utm_campaign,
+        device_type,
+        started_at,
+        last_activity_at,
+        is_active
+      `)
+      .gte('intent_score', parseFloat(minScore))
+      .order('intent_score', { ascending: false })
+      .limit(parseInt(limit));
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      journeys: data,
+      count: data.length,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching high-intent journeys:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch high-intent journeys'
+    });
+  }
+});
+
 // SPA fallback - serve React app for all non-API routes
 app.get('*', (req, res) => {
   // Don't serve React app for API routes
@@ -811,6 +1025,9 @@ app.listen(PORT, () => {
   console.log(`🎯 Tracking: http://localhost:${PORT}/tracking-script.js`);
   console.log(`📊 Analytics: POST http://localhost:${PORT}/api/analytics/track`);
   console.log(`🔄 Workflows: GET http://localhost:${PORT}/api/workflows/active`);
+  console.log(`🛤️ Journey Tracker: http://localhost:${PORT}/journey-tracker.js`);
+  console.log(`📈 Journey Updates: POST http://localhost:${PORT}/api/journey-update`);
+  console.log(`🎯 High Intent: GET http://localhost:${PORT}/api/journey-analytics/high-intent`);
   console.log(`🌐 Frontend: http://localhost:${PORT}/`);
 });
 
