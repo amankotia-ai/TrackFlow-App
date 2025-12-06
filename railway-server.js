@@ -5,8 +5,13 @@ import * as cheerio from 'cheerio';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createClickHouseClient } from '@clickhouse/client';
+
+// Load environment variables
+dotenv.config();
+
 // Dynamic import will be used for hierarchical scrape to avoid module resolution issues
 
 const __filename = fileURLToPath(import.meta.url);
