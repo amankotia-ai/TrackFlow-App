@@ -27,8 +27,11 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cC
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Initialize ClickHouse client
+const clickhouseHost = process.env.CLICKHOUSE_HOST || 'http://localhost:8123';
+const clickhouseConfigured = !!process.env.CLICKHOUSE_HOST;
+
 const clickhouse = createClickHouseClient({
-  url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  url: clickhouseHost,
   username: process.env.CLICKHOUSE_USER || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || '',
   database: process.env.CLICKHOUSE_DATABASE || 'default',
@@ -40,6 +43,8 @@ const clickhouse = createClickHouseClient({
 });
 
 console.log('📊 ClickHouse client initialized');
+console.log('   📍 Host:', clickhouseHost);
+console.log('   ✅ Configured:', clickhouseConfigured ? 'Yes (env vars set)' : 'No (using defaults)');
 
 
 // Service role client for demo workflows (bypasses RLS)
@@ -1348,6 +1353,22 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
     const { countryCode } = req.params;
     const { limit = 50 } = req.query;
     
+    console.log(`📊 Fetching visitors for country: ${countryCode}`);
+    
+    // Check if ClickHouse is properly configured
+    if (!clickhouseConfigured) {
+      console.warn('⚠️ ClickHouse not configured - returning empty data');
+      return res.json({
+        success: true,
+        countryCode,
+        visitors: [],
+        recentSessions: [],
+        total: 0,
+        note: 'ClickHouse not configured',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     const resultSet = await clickhouse.query({
       query: `
         SELECT 
@@ -1369,6 +1390,7 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
     });
     
     const visitors = await resultSet.json();
+    console.log(`✅ Found ${visitors.length} visitors for ${countryCode}`);
     
     // Get recent sessions for these visitors
     const visitorIds = visitors.map(v => v.visitor_id);
@@ -1407,7 +1429,13 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching visitors by country:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch visitors' });
+    console.error('   Details:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch visitors',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
@@ -1491,6 +1519,17 @@ app.get('/api/analytics/live', async (req, res) => {
 // Queries analytics_events to stay in sync with /api/analytics/live endpoint
 app.get('/api/analytics/live-locations', async (req, res) => {
     try {
+        // Check if ClickHouse is properly configured
+        if (!clickhouseConfigured) {
+            console.log('⚠️ ClickHouse not configured - returning empty locations');
+            return res.json({
+                success: true,
+                locations: [],
+                note: 'ClickHouse not configured',
+                timestamp: new Date().toISOString()
+            });
+        }
+
         // Query analytics_events for country data (same table as live users count)
         const resultSet = await clickhouse.query({
             query: `
@@ -1519,10 +1558,12 @@ app.get('/api/analytics/live-locations', async (req, res) => {
         });
     } catch (error) {
         console.error('Live locations error:', error);
+        console.error('   Details:', error.message);
         // Return empty array on error (ClickHouse may not be available)
         res.json({ 
             success: true, 
             locations: [],
+            error: 'ClickHouse query failed',
             timestamp: new Date().toISOString()
         });
     }
