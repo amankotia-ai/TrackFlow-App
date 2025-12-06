@@ -37,15 +37,66 @@
       this.pageInteractions = [];
       this.scrollDepth = 0;
       this.maxScrollDepth = 0;
+      this.geolocationData = null; // Store geolocation data
       
       // Load or create journey from sessionStorage
       this.journey = this.loadJourneyFromSession();
       
       // Setup tracking
       this.setupTracking();
-      this.trackPageVisit();
+      
+      // Fetch geolocation first, then track page visit
+      this.fetchGeolocation().then(() => {
+        this.trackPageVisit();
+      });
       
       this.log('✅ Cookie-Free Journey Tracker initialized');
+    }
+
+    /**
+     * Fetch geolocation data via IP-based service
+     */
+    async fetchGeolocation() {
+      // Check cache first
+      const cached = sessionStorage.getItem(this.config.storagePrefix + 'geo');
+      if (cached) {
+        try {
+          this.geolocationData = JSON.parse(cached);
+          this.log('🌍 Using cached geolocation: ' + this.geolocationData.countryCode);
+          return;
+        } catch (e) {
+          // Continue to fetch fresh data
+        }
+      }
+
+      try {
+        const response = await fetch('https://ipapi.co/json/', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          this.geolocationData = {
+            country: data.country_name || '',
+            countryCode: data.country_code || 'unknown',
+            region: data.region || '',
+            city: data.city || '',
+            timezone: data.timezone || ''
+          };
+          
+          // Cache for the session
+          sessionStorage.setItem(
+            this.config.storagePrefix + 'geo',
+            JSON.stringify(this.geolocationData)
+          );
+          
+          this.log('🌍 Geolocation fetched: ' + this.geolocationData.countryCode, 'success');
+        }
+      } catch (error) {
+        this.log('⚠️ Geolocation fetch failed: ' + error.message, 'warning');
+        this.geolocationData = { countryCode: 'unknown' };
+      }
     }
 
     /**
@@ -275,6 +326,8 @@
         if (!this.config.apiEndpoint) return;
 
         try {
+            const countryCode = this.geolocationData?.countryCode || 'unknown';
+            
             const payload = {
                 events: [{
                     eventType: 'page_view',
@@ -282,16 +335,21 @@
                     sessionId: this.journey.sessionId,
                     timestamp: new Date().toISOString(),
                     deviceType: this.getDeviceType(),
+                    countryCode: countryCode, // Include country code for globe visualization
                     browserInfo: {
                         userAgent: navigator.userAgent,
                         language: navigator.language
                     },
                     eventData: {
                         title: pageData.title,
-                        referrer: pageData.referrer
+                        referrer: pageData.referrer,
+                        country: this.geolocationData?.country || '',
+                        countryCode: countryCode
                     }
                 }]
             };
+
+            this.log(`📤 Sending page_view with country: ${countryCode}`);
 
             fetch(this.config.apiEndpoint + '/analytics/track', {
                 method: 'POST',
@@ -712,10 +770,18 @@
         currentPage: window.location.pathname,
         pagePaths: this.journey.pages.map(p => p.path),
         utm: this.journey.utm,
+        utmSource: this.journey.utm?.source || '',
+        utmCampaign: this.journey.utm?.campaign || '',
         device: this.journey.device,
+        deviceType: this.getDeviceType(),
         avgTimePerPage: this.getAverageTimePerPage(),
         avgScrollDepth: this.getAverageScrollDepth(),
-        referrer: this.journey.referrer
+        referrer: this.journey.referrer,
+        // Include geolocation data for globe visualization
+        country: this.geolocationData?.country || '',
+        countryCode: this.geolocationData?.countryCode || 'unknown',
+        visitorId: this.journey.sessionId,
+        startTime: this.journey.startedAt
       };
     }
 

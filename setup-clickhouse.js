@@ -28,13 +28,25 @@ async function setup() {
           workflow_id Nullable(String),
           metadata String,
           device_type String,
-          browser_info String
+          browser_info String,
+          country_code String DEFAULT 'unknown'
         ) ENGINE = MergeTree()
         PARTITION BY toYYYYMM(timestamp)
         ORDER BY (timestamp, event_type)
       `,
     });
     console.log('✅ Created analytics_events table');
+    
+    // Add country_code column if table already exists (migration)
+    try {
+      await client.command({
+        query: `ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS country_code String DEFAULT 'unknown'`
+      });
+      console.log('✅ Added country_code column to analytics_events');
+    } catch (e) {
+      // Column might already exist or ClickHouse version doesn't support IF NOT EXISTS
+      console.log('ℹ️ country_code column already exists or migration skipped');
+    }
 
     // Workflow Executions Table
     await client.command({

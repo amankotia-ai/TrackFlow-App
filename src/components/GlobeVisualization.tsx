@@ -122,18 +122,26 @@ const GlobeVisualization: React.FC = () => {
   const markersRef = useRef<Marker[]>([]);
   const locationDataRef = useRef<LocationData[]>([]);
 
-  // Fetch live location data from ClickHouse
+  // Fetch live user data from both endpoints to stay in sync
   useEffect(() => {
-    const fetchLocations = async () => {
+    const fetchLiveData = async () => {
       try {
-        const response = await fetch('/api/analytics/live-locations');
-        if (response.ok) {
-          const data = await response.json();
-          locationDataRef.current = data.locations || [];
-          
-          // Calculate total users
-          const total = locationDataRef.current.reduce((sum, loc) => sum + loc.user_count, 0);
-          setTotalUsers(total);
+        // Fetch both endpoints in parallel - use the same source as RealTimeUsers widget
+        const [liveResponse, locationsResponse] = await Promise.all([
+          fetch('/api/analytics/live'),
+          fetch('/api/analytics/live-locations')
+        ]);
+        
+        // Get the authoritative live user count (same as RealTimeUsers widget)
+        if (liveResponse.ok) {
+          const liveData = await liveResponse.json();
+          setTotalUsers(liveData.liveUsers || 0);
+        }
+        
+        // Get location data for markers if available
+        if (locationsResponse.ok) {
+          const locData = await locationsResponse.json();
+          locationDataRef.current = locData.locations || [];
           
           // Convert location data to markers
           const newMarkers: Marker[] = [];
@@ -155,7 +163,6 @@ const GlobeVisualization: React.FC = () => {
             }
           });
           
-          // Only show real data from ClickHouse
           markersRef.current = newMarkers;
         }
       } catch (e) {
@@ -164,8 +171,8 @@ const GlobeVisualization: React.FC = () => {
       }
     };
     
-    fetchLocations();
-    const interval = setInterval(fetchLocations, 15000);
+    fetchLiveData();
+    const interval = setInterval(fetchLiveData, 10000); // Match RealTimeUsers polling interval
     
     return () => clearInterval(interval);
   }, []);

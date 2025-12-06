@@ -394,18 +394,19 @@ app.post('/api/analytics/track', async (req, res) => {
             workflow_id: event.workflowId ? String(event.workflowId) : null,
             metadata: JSON.stringify(event.eventData || {}),
             device_type: event.deviceType || 'desktop',
-            browser_info: JSON.stringify(event.browserInfo || {})
+            browser_info: JSON.stringify(event.browserInfo || {}),
+            country_code: event.countryCode || event.eventData?.countryCode || 'unknown'
           })),
           format: 'JSONEachRow',
         });
-        console.log('✅ Events flushed to ClickHouse');
+        console.log('✅ Events flushed to ClickHouse with country_code');
       } catch (chError) {
         console.error('⚠️ ClickHouse insert failed (continuing):', chError.message);
       }
 
       // Log the events for now (in production, save to database)
       events.forEach(event => {
-        console.log('📊 Event:', event.eventType, event.elementSelector, event.pageContext?.pathname);
+        console.log('📊 Event:', event.eventType, event.countryCode || 'unknown', event.pageContext?.pathname || event.pageUrl);
       });
     }
     
@@ -836,6 +837,9 @@ app.post('/api/journey-update', async (req, res) => {
 
     // Dual-write to ClickHouse
     try {
+      const countryCode = analytics.countryCode || analytics.country || 'unknown';
+      console.log(`📊 Journey update with country: ${countryCode}`);
+      
       await clickhouse.insert({
         table: 'visitor_journeys',
         values: [{
@@ -846,12 +850,13 @@ app.post('/api/journey-update', async (req, res) => {
           page_count: analytics.pageCount || 1,
           event_count: analytics.eventCount || 0,
           device_type: analytics.deviceType || 'desktop',
-          country_code: analytics.country || 'unknown',
-          utm_source: analytics.utmSource || '',
-          utm_campaign: analytics.utmCampaign || ''
+          country_code: countryCode,
+          utm_source: analytics.utmSource || analytics.utm?.source || '',
+          utm_campaign: analytics.utmCampaign || analytics.utm?.campaign || ''
         }],
         format: 'JSONEachRow'
       });
+      console.log('✅ Journey written to ClickHouse');
     } catch (chError) {
       console.error('⚠️ ClickHouse journey insert failed:', chError.message);
     }
@@ -1095,15 +1100,19 @@ app.get('/api/analytics/live', async (req, res) => {
 });
 
 // Real-time Live Users with Location Data for Globe Visualization
+// Queries analytics_events to stay in sync with /api/analytics/live endpoint
 app.get('/api/analytics/live-locations', async (req, res) => {
     try {
+        // Query analytics_events for country data (same table as live users count)
         const resultSet = await clickhouse.query({
             query: `
                 SELECT 
                     country_code,
-                    count() as user_count
-                FROM visitor_journeys
-                WHERE end_time >= now() - INTERVAL 5 MINUTE
+                    uniq(session_id) as user_count
+                FROM analytics_events
+                WHERE timestamp >= now() - INTERVAL 5 MINUTE
+                  AND country_code != ''
+                  AND country_code != 'unknown'
                 GROUP BY country_code
                 ORDER BY user_count DESC
                 LIMIT 100
@@ -1112,6 +1121,8 @@ app.get('/api/analytics/live-locations', async (req, res) => {
         });
         
         const data = await resultSet.json();
+        
+        console.log(`🌍 Live locations query returned ${data.length} countries`);
         
         res.json({
             success: true,
