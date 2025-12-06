@@ -2046,6 +2046,160 @@ app.get('/api/analytics/live-locations', async (req, res) => {
     }
 });
 
+// Page Visits Data (filtered by user's websites) - tracks ALL page visits, not just workflow-related
+app.get('/api/analytics/page-visits', async (req, res) => {
+    try {
+        const { days = 30 } = req.query;
+        
+        // Verify user authentication
+        const user = await verifyUserToken(req);
+        
+        if (!user) {
+          return res.json({
+            success: true,
+            data: {
+              totalPageVisits: 0,
+              uniqueSessions: 0,
+              uniquePages: 0,
+              todayVisits: 0,
+              visitsByDate: {},
+              recentVisits: []
+            },
+            message: 'Authentication required to view page visits'
+          });
+        }
+        
+        // Get user's website domains
+        const userDomains = await getUserWebsiteDomains(user.id);
+        
+        if (userDomains.length === 0) {
+          return res.json({
+            success: true,
+            data: {
+              totalPageVisits: 0,
+              uniqueSessions: 0,
+              uniquePages: 0,
+              todayVisits: 0,
+              visitsByDate: {},
+              recentVisits: []
+            },
+            message: 'No websites configured. Create a workflow to start tracking.'
+          });
+        }
+        
+        const domainPatterns = userDomains.map(d => `%${d}%`);
+        
+        // Query for page_view events from ClickHouse - this includes ALL page visits
+        const [totalResult, dailyResult, recentResult] = await Promise.all([
+          // Total stats
+          clickhouse.query({
+            query: `
+              SELECT 
+                count() as total_visits,
+                uniq(session_id) as unique_sessions,
+                uniq(page_url) as unique_pages,
+                countIf(toDate(timestamp) = today()) as today_visits
+              FROM analytics_events
+              WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+                AND event_type = 'page_view'
+                AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
+            `,
+            query_params: { 
+              days: parseInt(days),
+              ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+            },
+            format: 'JSONEachRow'
+          }),
+          // Daily breakdown
+          clickhouse.query({
+            query: `
+              SELECT 
+                toDate(timestamp) as date,
+                count() as visits
+              FROM analytics_events
+              WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+                AND event_type = 'page_view'
+                AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
+              GROUP BY date
+              ORDER BY date ASC
+            `,
+            query_params: { 
+              days: parseInt(days),
+              ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+            },
+            format: 'JSONEachRow'
+          }),
+          // Recent visits (last 100)
+          clickhouse.query({
+            query: `
+              SELECT 
+                page_url,
+                session_id,
+                visitor_id,
+                device_type,
+                country_code,
+                timestamp
+              FROM analytics_events
+              WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+                AND event_type = 'page_view'
+                AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
+              ORDER BY timestamp DESC
+              LIMIT 100
+            `,
+            query_params: { 
+              days: parseInt(days),
+              ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+            },
+            format: 'JSONEachRow'
+          })
+        ]);
+
+        const totals = (await totalResult.json())[0] || { total_visits: 0, unique_sessions: 0, unique_pages: 0, today_visits: 0 };
+        const dailyData = await dailyResult.json();
+        const recentVisits = await recentResult.json();
+        
+        // Convert daily data to object format
+        const visitsByDate = dailyData.reduce((acc, row) => {
+          acc[row.date] = parseInt(row.visits);
+          return acc;
+        }, {});
+
+        res.json({
+            success: true,
+            data: {
+              totalPageVisits: parseInt(totals.total_visits),
+              uniqueSessions: parseInt(totals.unique_sessions),
+              uniquePages: parseInt(totals.unique_pages),
+              todayVisits: parseInt(totals.today_visits),
+              visitsByDate,
+              recentVisits: recentVisits.map(v => ({
+                pageUrl: v.page_url,
+                sessionId: v.session_id,
+                visitorId: v.visitor_id,
+                deviceType: v.device_type,
+                countryCode: v.country_code,
+                timestamp: v.timestamp
+              }))
+            },
+            domains: userDomains
+        });
+    } catch (error) {
+        console.error('Page visits error:', error);
+        res.status(500).json({ 
+          success: false,
+          error: 'Failed to fetch page visits',
+          data: {
+            totalPageVisits: 0,
+            uniqueSessions: 0,
+            uniquePages: 0,
+            todayVisits: 0,
+            visitsByDate: {},
+            recentVisits: []
+          }
+        });
+    }
+});
+
 // Timeseries Data (filtered by user's websites)
 app.get('/api/analytics/timeseries', async (req, res) => {
     try {
@@ -2180,6 +2334,7 @@ app.listen(PORT, () => {
   console.log(`🕷️ Scrape: POST http://localhost:${PORT}/api/scrape`);
   console.log(`🎯 Tracking: http://localhost:${PORT}/tracking-script.js`);
   console.log(`📊 Analytics: POST http://localhost:${PORT}/api/analytics/track`);
+  console.log(`📈 Page Visits: GET http://localhost:${PORT}/api/analytics/page-visits`);
   console.log(`🔄 Workflows: GET http://localhost:${PORT}/api/workflows/active`);
   console.log(`🛤️ Journey Tracker: http://localhost:${PORT}/journey-tracker.js`);
   console.log(`📈 Journey Updates: POST http://localhost:${PORT}/api/journey-update`);

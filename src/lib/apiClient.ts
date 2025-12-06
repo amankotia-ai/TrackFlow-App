@@ -806,81 +806,12 @@ export class ApiClient {
   }
   
   /**
-   * Get total page visits count across all workflows
+   * Get total page visits count - queries ClickHouse for ALL page visits (not just workflow-related)
+   * This properly tracks page visits even without workflow execution
    */
   async getTotalPageVisits(days: number = 30): Promise<ApiResponse> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        return {
-          success: false,
-          error: 'User not authenticated',
-          timestamp: new Date().toISOString(),
-        };
-      }
-      
-      // Get all page_load and page_view events for user's workflows
-      const { data, error } = await supabase
-        .from('analytics_events')
-        .select(`
-          id,
-          event_type,
-          session_id,
-          page_url,
-          created_at,
-          workflows!inner(user_id)
-        `)
-        .eq('workflows.user_id', user.id)
-        .in('event_type', ['page_load', 'page_view'])
-        .gte('created_at', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
-      
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        };
-      }
-      
-      const events = data || [];
-      
-      // Calculate various metrics
-      const totalPageVisits = events.length;
-      const uniqueSessions = new Set(events.map(e => e.session_id)).size;
-      const uniquePages = new Set(events.map(e => e.page_url)).size;
-      
-      // Group by date for trend data
-      const visitsByDate = events.reduce((acc, event) => {
-        const date = new Date(event.created_at).toISOString().split('T')[0];
-        acc[date] = (acc[date] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-      
-      // Get today's visits
-      const today = new Date().toISOString().split('T')[0];
-      const todayVisits = visitsByDate[today] || 0;
-      
-      return {
-        success: true,
-        data: {
-          totalPageVisits,
-          uniqueSessions,
-          uniquePages,
-          todayVisits,
-          visitsByDate,
-          events: events.slice(0, 100) // Return recent 100 events for detail view
-        },
-        timestamp: new Date().toISOString(),
-      };
-      
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Failed to load page visits',
-        timestamp: new Date().toISOString(),
-      };
-    }
+    const endpoint = import.meta.env.VITE_API_ENDPOINT || 'http://localhost:3001';
+    return this.makeRequest(`${endpoint}/api/analytics/page-visits?days=${days}`);
   }
 
   /**
