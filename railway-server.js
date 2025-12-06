@@ -1065,6 +1065,30 @@ app.get('/api/analytics/dashboard', async (req, res) => {
   }
 });
 
+// Real-time Live Users Widget
+app.get('/api/analytics/live', async (req, res) => {
+    try {
+        const resultSet = await clickhouse.query({
+            query: `
+                SELECT uniq(session_id) as live_users 
+                FROM analytics_events 
+                WHERE timestamp >= now() - INTERVAL 5 MINUTE
+            `,
+            format: 'JSONEachRow'
+        });
+        
+        const data = await resultSet.json();
+        res.json({
+            success: true,
+            liveUsers: parseInt(data[0]?.live_users || 0),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Live users error:', error);
+        res.status(500).json({ error: 'Failed to fetch live users' });
+    }
+});
+
 // Timeseries Data
 app.get('/api/analytics/timeseries', async (req, res) => {
     try {

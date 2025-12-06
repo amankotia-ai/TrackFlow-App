@@ -20,6 +20,7 @@ import { Workflow, WorkflowTemplate } from '../types/workflow';
 import { WorkflowService } from '../services/workflowService';
 import { workflowTemplates } from '../data/workflowTemplates';
 import TemplatePreviewModal from './TemplatePreviewModal';
+import RealTimeUsers from './RealTimeUsers';
 
 interface DashboardProps {
   workflows?: Workflow[];
@@ -151,41 +152,47 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="max-w-[1600px] mx-auto px-6 py-6">
         
         {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-px bg-zinc-200 border border-zinc-200 rounded-md mb-8 overflow-hidden">
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
-              <BarChart3 className="size-4 text-zinc-400" />
-              <span className="text-xs text-zinc-500 uppercase tracking-wider">Total Playbooks</span>
-            </div>
-            <div className="text-3xl font-light mb-1">{stats.totalPlaybooks}</div>
-            <div className="text-xs text-zinc-500">All workflows</div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          {/* Real-Time Users Widget */}
+          <RealTimeUsers className="lg:col-span-1" />
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="size-4 text-zinc-400" />
-              <span className="text-xs text-zinc-500 uppercase tracking-wider">Active</span>
+          {/* Summary Stats */}
+          <div className="grid grid-cols-4 gap-px bg-zinc-200 border border-zinc-200 rounded-md overflow-hidden lg:col-span-4">
+            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="size-4 text-zinc-400" />
+                <span className="text-xs text-zinc-500 uppercase tracking-wider">Total Playbooks</span>
+              </div>
+              <div className="text-3xl font-light mb-1">{stats.totalPlaybooks}</div>
+              <div className="text-xs text-zinc-500">All workflows</div>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.activePlaybooks}</div>
-            <div className="text-xs text-zinc-500">Running now</div>
-          </div>
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
-              <Activity className="size-4 text-zinc-400" />
-              <span className="text-xs text-zinc-500 uppercase tracking-wider">Executions</span>
+            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="size-4 text-zinc-400" />
+                <span className="text-xs text-zinc-500 uppercase tracking-wider">Active</span>
+              </div>
+              <div className="text-3xl font-light mb-1">{stats.activePlaybooks}</div>
+              <div className="text-xs text-zinc-500">Running now</div>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.totalExecutions.toLocaleString()}</div>
-            <div className="text-xs text-zinc-500">Total runs</div>
-          </div>
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock className="size-4 text-zinc-400" />
-              <span className="text-xs text-zinc-500 uppercase tracking-wider">Success Rate</span>
+            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="size-4 text-zinc-400" />
+                <span className="text-xs text-zinc-500 uppercase tracking-wider">Executions</span>
+              </div>
+              <div className="text-3xl font-light mb-1">{stats.totalExecutions.toLocaleString()}</div>
+              <div className="text-xs text-zinc-500">Total runs</div>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.successRate}%</div>
-            <div className="text-xs text-zinc-500">Estimated</div>
+
+            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="size-4 text-zinc-400" />
+                <span className="text-xs text-zinc-500 uppercase tracking-wider">Success Rate</span>
+              </div>
+              <div className="text-3xl font-light mb-1">{stats.successRate}%</div>
+              <div className="text-xs text-zinc-500">Estimated</div>
+            </div>
           </div>
         </div>
 
