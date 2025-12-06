@@ -96,8 +96,10 @@ export function generateIntegrationCode(
  * Generate the simple head code for unified system
  */
 function generateUnifiedHeadCode(config: TrackingConfig): string {
-  const scriptUrl = config.trackingScriptUrl || 'https://trackflow-app-production.up.railway.app/api/unified-workflow-system.js';
-  const antiFlickerUrl = 'https://trackflow-app-production.up.railway.app/api/anti-flicker.js';
+  const baseUrl = config.trackingScriptUrl?.replace('/api/unified-workflow-system.js', '') || 'https://trackflow-app-production.up.railway.app';
+  const scriptUrl = config.trackingScriptUrl || `${baseUrl}/api/unified-workflow-system.js`;
+  const antiFlickerUrl = `${baseUrl}/api/anti-flicker.js`;
+  const journeyTrackerUrl = `${baseUrl}/journey-tracker.js`;
   
   const antiFlickerConfig = `
   // Configure anti-flicker settings
@@ -106,15 +108,19 @@ function generateUnifiedHeadCode(config: TrackingConfig): string {
     showLoadingIndicator: true,
     debug: ${config.debug || false},
     hideMethod: 'opacity'
-  };`;
+  };
+  // Set API endpoint for journey tracker
+  window.TRACKFLOW_API_ENDPOINT = '${baseUrl}/api';`;
   
   if (config.apiKey) {
-    return `<!-- Unified Workflow System with Anti-Flicker - Add to <head> section -->
+    return `<!-- TrackFlow - Add to <head> section -->
 <script>
   ${antiFlickerConfig}
 </script>
 <!-- Anti-flicker script (loads first to prevent FOOC) -->
 <script src="${antiFlickerUrl}"></script>
+<!-- Journey tracker for visitor analytics -->
+<script src="${journeyTrackerUrl}"></script>
 <!-- Main workflow system -->
 <script src="${scriptUrl}"></script>
 <script>
@@ -127,12 +133,14 @@ function generateUnifiedHeadCode(config: TrackingConfig): string {
 </script>`;
   }
   
-  return `<!-- Unified Workflow System with Anti-Flicker - Add to <head> section -->
+  return `<!-- TrackFlow - Add to <head> section -->
 <script>
   ${antiFlickerConfig}
 </script>
 <!-- Anti-flicker script (loads first to prevent FOOC) -->
 <script src="${antiFlickerUrl}"></script>
+<!-- Journey tracker for visitor analytics -->
+<script src="${journeyTrackerUrl}"></script>
 <!-- Main workflow system -->
 <script src="${scriptUrl}"></script>`;
 }

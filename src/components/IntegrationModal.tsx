@@ -14,18 +14,22 @@ const IntegrationModal: React.FC<IntegrationModalProps> = ({ workflow, isOpen, o
   if (!isOpen) return null;
 
   // Minimal, single-snippet integration code with API key one-liner
-  const headSnippet = `<!-- Unified Workflow System with Anti-Flicker - Add to <head> section -->
+  const headSnippet = `<!-- TrackFlow - Add to <head> section -->
 <script>
-  // Configure anti-flicker settings
+  // Configure anti-flicker and tracking settings
   window.unifiedWorkflowConfig = {
     maxHideTime: 5000,
     showLoadingIndicator: true,
     debug: true,
     hideMethod: 'opacity'
   };
+  // Set API endpoint for visitor tracking
+  window.TRACKFLOW_API_ENDPOINT = 'https://trackflow-app-production.up.railway.app/api';
 </script>
 <!-- Anti-flicker script (loads first to prevent FOOC) -->
 <script src="https://trackflow-app-production.up.railway.app/api/anti-flicker.js"></script>
+<!-- Journey tracker for visitor analytics -->
+<script src="https://trackflow-app-production.up.railway.app/journey-tracker.js"></script>
 <!-- Main workflow system -->
 <script src="https://trackflow-app-production.up.railway.app/api/unified-workflow-system.js"></script>
 <!-- API key (replace YOUR_API_KEY) -->

@@ -1049,28 +1049,31 @@ app.post('/api/journey-update', async (req, res) => {
       console.error('⚠️ ClickHouse journey insert failed:', chError.message);
     }
 
-    // Call Supabase function to update journey
-    const { data, error } = await supabaseServiceRole.rpc('update_journey_from_client', {
-      p_session_id: sessionId,
-      p_analytics: { ...analytics, visitorId: effectiveVisitorId, anonymousName: effectiveName },
-      p_pages: journey?.pages || null,
-      p_is_final: isFinal || false
-    });
-
-    if (error) {
-      console.error('❌ Error updating journey in Supabase:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to update journey',
-        details: error.message
+    // Call Supabase function to update journey (non-blocking - don't fail if this errors)
+    // ClickHouse is the primary data store for live visitor analytics
+    let supabaseJourneyId = null;
+    try {
+      const { data, error } = await supabaseServiceRole.rpc('update_journey_from_client', {
+        p_session_id: sessionId,
+        p_analytics: { ...analytics, visitorId: effectiveVisitorId, anonymousName: effectiveName },
+        p_pages: journey?.pages || null,
+        p_is_final: isFinal || false
       });
+
+      if (error) {
+        console.error('⚠️ Supabase journey update failed (non-blocking):', error.message);
+      } else {
+        supabaseJourneyId = data;
+        console.log(`✅ Journey also saved to Supabase: ${data}`);
+      }
+    } catch (supabaseError) {
+      console.error('⚠️ Supabase call failed (non-blocking):', supabaseError.message);
     }
 
-    console.log(`✅ Journey updated successfully: ${data}`);
-
+    // Always return success if we got this far - ClickHouse is primary
     res.json({
       success: true,
-      journeyId: data,
+      journeyId: supabaseJourneyId,
       visitorId: effectiveVisitorId,
       sessionId,
       timestamp: new Date().toISOString()
