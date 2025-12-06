@@ -1094,6 +1094,41 @@ app.get('/api/analytics/live', async (req, res) => {
     }
 });
 
+// Real-time Live Users with Location Data for Globe Visualization
+app.get('/api/analytics/live-locations', async (req, res) => {
+    try {
+        const resultSet = await clickhouse.query({
+            query: `
+                SELECT 
+                    country_code,
+                    count() as user_count
+                FROM visitor_journeys
+                WHERE end_time >= now() - INTERVAL 5 MINUTE
+                GROUP BY country_code
+                ORDER BY user_count DESC
+                LIMIT 100
+            `,
+            format: 'JSONEachRow'
+        });
+        
+        const data = await resultSet.json();
+        
+        res.json({
+            success: true,
+            locations: data,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Live locations error:', error);
+        // Return empty array on error (ClickHouse may not be available)
+        res.json({ 
+            success: true, 
+            locations: [],
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 // Timeseries Data
 app.get('/api/analytics/timeseries', async (req, res) => {
     try {

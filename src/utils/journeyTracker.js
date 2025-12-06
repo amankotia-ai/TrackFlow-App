@@ -245,6 +245,48 @@
       
       // Send to analytics endpoint if configured
       this.sendJourneyUpdate();
+
+      // Send immediate real-time page view for dashboard widget
+      this.trackRealTimePageView(pageData);
+    }
+
+    /**
+     * Send real-time page view to analytics endpoint
+     * This feeds the "Real-Time Users" dashboard widget directly
+     */
+    trackRealTimePageView(pageData) {
+      if (!this.config.apiEndpoint) return;
+
+      try {
+        const payload = {
+          events: [{
+            eventType: 'page_view',
+            pageUrl: pageData.fullUrl,
+            sessionId: this.journey.sessionId,
+            timestamp: new Date().toISOString(),
+            deviceType: this.getDeviceType(),
+            browserInfo: {
+              userAgent: navigator.userAgent,
+              language: navigator.language
+            },
+            eventData: {
+              title: pageData.title,
+              referrer: pageData.referrer
+            }
+          }]
+        };
+
+        fetch(this.config.apiEndpoint + '/analytics/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        }).catch(err => {
+          // Silent fail for real-time tracking to not disrupt main flow
+        });
+      } catch (e) {
+        // Ignore errors
+      }
     }
 
     /**

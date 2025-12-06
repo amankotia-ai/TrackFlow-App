@@ -36,35 +36,26 @@ const RealTimeUsers: React.FC<RealTimeUsersProps> = ({ className }) => {
 
   if (error) {
     return (
-      <Card className={`border-zinc-200 shadow-sm ${className}`}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-zinc-500">
-            Real-Time Users
-          </CardTitle>
-          <Zap className="h-4 w-4 text-zinc-300" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-sm text-zinc-400">Unavailable</div>
-        </CardContent>
-      </Card>
+      <div className={`bg-white p-6 hover:bg-zinc-50 transition-colors ${className}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="size-4 text-zinc-300" />
+          <span className="text-xs text-zinc-500 uppercase tracking-wider">Real-Time Users</span>
+        </div>
+        <div className="text-3xl font-light mb-1 text-zinc-400">-</div>
+        <div className="text-xs text-zinc-500">Unavailable</div>
+      </div>
     );
   }
 
   return (
-    <Card className={`border-zinc-200 shadow-sm ${className}`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">
-          Real-Time Users
-        </CardTitle>
-        <Zap className="h-4 w-4 text-amber-500 fill-amber-500 animate-pulse" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{liveCount}</div>
-        <p className="text-xs text-muted-foreground">
-          Active in last 5 mins
-        </p>
-      </CardContent>
-    </Card>
+    <div className={`bg-white p-6 hover:bg-zinc-50 transition-colors ${className}`}>
+      <div className="flex items-center gap-2 mb-3">
+        <Zap className="size-4 text-amber-500 fill-amber-500 animate-pulse" />
+        <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider">Real-Time Users</span>
+      </div>
+      <div className="text-3xl font-light mb-1">{liveCount}</div>
+      <div className="text-xs text-zinc-500">Active in last 5 mins</div>
+    </div>
   );
 };
 

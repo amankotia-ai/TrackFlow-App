@@ -21,6 +21,7 @@ import { WorkflowService } from '../services/workflowService';
 import { workflowTemplates } from '../data/workflowTemplates';
 import TemplatePreviewModal from './TemplatePreviewModal';
 import RealTimeUsers from './RealTimeUsers';
+import GlobeVisualization from './GlobeVisualization';
 
 interface DashboardProps {
   workflows?: Workflow[];
@@ -152,172 +153,51 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="max-w-[1600px] mx-auto px-6 py-6">
         
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-px bg-zinc-200 border border-zinc-200 rounded-md overflow-hidden mb-8">
           {/* Real-Time Users Widget */}
-          <RealTimeUsers className="lg:col-span-1" />
+          <RealTimeUsers />
 
-          {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-px bg-zinc-200 border border-zinc-200 rounded-md overflow-hidden lg:col-span-4">
-            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <BarChart3 className="size-4 text-zinc-400" />
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">Total Playbooks</span>
-              </div>
-              <div className="text-3xl font-light mb-1">{stats.totalPlaybooks}</div>
-              <div className="text-xs text-zinc-500">All workflows</div>
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Total Playbooks</span>
             </div>
+            <div className="text-3xl font-light mb-1">{stats.totalPlaybooks}</div>
+            <div className="text-xs text-zinc-500">All workflows</div>
+          </div>
 
-            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap className="size-4 text-zinc-400" />
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">Active</span>
-              </div>
-              <div className="text-3xl font-light mb-1">{stats.activePlaybooks}</div>
-              <div className="text-xs text-zinc-500">Running now</div>
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Active</span>
             </div>
+            <div className="text-3xl font-light mb-1">{stats.activePlaybooks}</div>
+            <div className="text-xs text-zinc-500">Running now</div>
+          </div>
 
-            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <Activity className="size-4 text-zinc-400" />
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">Executions</span>
-              </div>
-              <div className="text-3xl font-light mb-1">{stats.totalExecutions.toLocaleString()}</div>
-              <div className="text-xs text-zinc-500">Total runs</div>
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Activity className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Executions</span>
             </div>
+            <div className="text-3xl font-light mb-1">{stats.totalExecutions.toLocaleString()}</div>
+            <div className="text-xs text-zinc-500">Total runs</div>
+          </div>
 
-            <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="size-4 text-zinc-400" />
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">Success Rate</span>
-              </div>
-              <div className="text-3xl font-light mb-1">{stats.successRate}%</div>
-              <div className="text-xs text-zinc-500">Estimated</div>
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Success Rate</span>
             </div>
+            <div className="text-3xl font-light mb-1">{stats.successRate}%</div>
+            <div className="text-xs text-zinc-500">Estimated</div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Recent Workflows */}
+          {/* Globe Visualization (Replacing Recent Playbooks) */}
           <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-900">Recent Playbooks</h2>
-                <p className="text-xs text-zinc-500 mt-1">Recently updated or executed workflows</p>
-              </div>
-              {workflows.length > 0 && (
-                <button 
-                  onClick={onViewAllWorkflows}
-                  className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 transition-colors"
-                >
-                  View all <ArrowRight className="size-3" />
-                </button>
-              )}
-            </div>
-
-            {workflows.length === 0 ? (
-              <div className="border border-zinc-200 rounded-md bg-white py-12 text-center">
-                <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-zinc-100 flex items-center justify-center">
-                  <BarChart3 className="size-6 text-zinc-400" />
-                </div>
-                <h3 className="text-sm font-medium mb-1">No playbooks yet</h3>
-                <p className="text-xs text-zinc-500 mb-4">Create your first workflow to get started</p>
-                <button 
-                  onClick={onCreateWorkflow}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                >
-                  Create new playbook
-                </button>
-              </div>
-            ) : (
-              <div className="border border-zinc-200 rounded-md overflow-hidden bg-white">
-                <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-zinc-50 text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-200">
-                  <div className="col-span-5">Name</div>
-                  <div className="col-span-2">Status</div>
-                  <div className="col-span-3">Last Run</div>
-                  <div className="col-span-2 text-right">Actions</div>
-                </div>
-                {recentWorkflows.map((workflow) => {
-                  const triggerNode = workflow.nodes.find(node => node.type === 'trigger');
-                  return (
-                    <div key={workflow.id} className="grid grid-cols-12 gap-4 px-4 py-3 text-sm border-b border-zinc-100 last:border-0 hover:bg-zinc-50 transition-colors items-center">
-                      <div className="col-span-5 flex items-center gap-3 min-w-0">
-                        {triggerNode ? getIconComponent(triggerNode.icon, "size-4 text-zinc-500 flex-shrink-0") : <Activity className="size-4 text-zinc-500 flex-shrink-0" />}
-                        <div className="min-w-0">
-                          <div 
-                            className="font-medium truncate cursor-pointer hover:text-blue-600 transition-colors"
-                            onClick={() => onWorkflowSelect && onWorkflowSelect(workflow)}
-                          >
-                            {workflow.name}
-                          </div>
-                          <div className="text-xs text-zinc-500 truncate flex items-center gap-1">
-                            {workflow.targetUrl && (
-                              <>
-                                <Globe className="size-3" />
-                                <span className="truncate max-w-[150px]">{new URL(workflow.targetUrl).hostname}</span>
-                              </>
-                            )}
-                            {!workflow.targetUrl && workflow.description}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="col-span-2">
-                        <div className="flex items-center gap-1.5">
-                          <div className={`size-2 rounded-full ${getStatusDotColor(workflow.status)}`} />
-                          <span className="capitalize text-zinc-600 text-xs">{workflow.status}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="col-span-3 text-zinc-600 text-xs">
-                        {workflow.lastRun ? formatTimeAgo(workflow.lastRun) : 'Never'}
-                      </div>
-                      
-                      <div className="col-span-2 flex justify-end">
-                         {/* Simple Actions */}
-                         <div className="flex items-center gap-1">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleWorkflowToggle(workflow);
-                              }}
-                              className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors"
-                              title={workflow.status === 'active' ? 'Pause' : 'Activate'}
-                            >
-                              {workflow.status === 'active' ? <Pause className="size-4" /> : <Play className="size-4" />}
-                            </button>
-                            
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onWorkflowSelect) onWorkflowSelect(workflow);
-                              }}
-                              className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors"
-                              title="Edit"
-                            >
-                              <Settings className="size-4" />
-                            </button>
-
-                            {onWorkflowDelete && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm('Are you sure you want to delete this workflow?')) {
-                                    onWorkflowDelete(workflow.id);
-                                  }
-                                }}
-                                className="p-1.5 text-zinc-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="size-4" />
-                              </button>
-                            )}
-                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <GlobeVisualization />
           </div>
 
           {/* Featured Templates */}
