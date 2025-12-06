@@ -59,12 +59,73 @@ console.log('📋 Supabase URL:', supabaseUrl);
 console.log('🔑 Supabase Anon Key:', supabaseKey ? 'Set ✅' : 'Missing ❌');
 console.log('🔑 Supabase Service Role Key:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Set ✅' : 'Missing ❌ (using anon key as fallback)');
 
+// IP Geolocation cache (in-memory, resets on server restart)
+const ipCountryCache = new Map();
+const IP_CACHE_TTL = 1000 * 60 * 60; // 1 hour cache
+
+// Get country code from IP address using free API
+async function getCountryFromIP(ip) {
+  // Skip local/private IPs
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+    return 'US'; // Default to US for local development
+  }
+
+  // Check cache first
+  const cached = ipCountryCache.get(ip);
+  if (cached && cached.timestamp > Date.now() - IP_CACHE_TTL) {
+    return cached.countryCode;
+  }
+
+  try {
+    // Use ip-api.com (free, no API key required, 45 requests/minute limit)
+    const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,countryCode`, {
+      timeout: 2000 // 2 second timeout
+    });
+    
+    if (response.data && response.data.status === 'success' && response.data.countryCode) {
+      const countryCode = response.data.countryCode;
+      ipCountryCache.set(ip, { countryCode, timestamp: Date.now() });
+      console.log(`🌍 IP ${ip} → ${countryCode}`);
+      return countryCode;
+    }
+  } catch (error) {
+    console.log(`⚠️ IP lookup failed for ${ip}:`, error.message);
+  }
+
+  // Default to 'US' if lookup fails (better than 'unknown' for map display)
+  return 'US';
+}
+
+// Get client IP from request (handles proxies)
+function getClientIP(req) {
+  // Railway/Cloudflare/Nginx proxy headers
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  
+  // Cloudflare specific
+  if (req.headers['cf-connecting-ip']) {
+    return req.headers['cf-connecting-ip'];
+  }
+  
+  // True-Client-IP (some CDNs)
+  if (req.headers['true-client-ip']) {
+    return req.headers['true-client-ip'];
+  }
+  
+  return req.ip || req.connection?.remoteAddress || '';
+}
+
 // Check if frontend was built
 const buildExists = fs.existsSync(path.join(__dirname, 'build'));
 const indexExists = fs.existsSync(path.join(__dirname, 'build', 'index.html'));
 console.log('🏗️ Frontend Build Status:');
 console.log('   📁 build/ directory:', buildExists ? 'Exists ✅' : 'Missing ❌');
 console.log('   📄 build/index.html:', indexExists ? 'Exists ✅' : 'Missing ❌');
+
+// Trust proxy for Railway deployment (allows correct IP detection)
+app.set('trust proxy', true);
 
 // CORS for all origins
 app.use(cors({
@@ -375,12 +436,16 @@ app.options('/tracking-script.js', (req, res) => {
 // Analytics endpoint for tracking events
 app.post('/api/analytics/track', async (req, res) => {
   try {
-    const { events } = req.body;
+    const { events, visitorId: bodyVisitorId, sessionId: bodySessionId } = req.body;
     
     console.log('📊 Received analytics events:', events?.length || 0);
     
     if (events && events.length > 0) {
-      // Async insert to ClickHouse
+      // Get country code from client IP (server-side geolocation)
+      const clientIP = getClientIP(req);
+      const serverCountryCode = await getCountryFromIP(clientIP);
+      
+      // Async insert to ClickHouse analytics_events
       try {
         await clickhouse.insert({
           table: 'analytics_events',
@@ -388,25 +453,76 @@ app.post('/api/analytics/track', async (req, res) => {
             event_type: event.eventType,
             page_url: event.pageContext?.url || event.pageUrl || '',
             element_selector: event.elementSelector || '',
-            timestamp: new Date().toISOString(), // ClickHouse handles basic ISO
-            session_id: event.sessionId || '',
+            timestamp: new Date().toISOString(),
+            session_id: event.sessionId || bodySessionId || '',
+            visitor_id: event.visitorId || bodyVisitorId || '',
             user_id: event.userId ? String(event.userId) : null,
             workflow_id: event.workflowId ? String(event.workflowId) : null,
             metadata: JSON.stringify(event.eventData || {}),
             device_type: event.deviceType || 'desktop',
             browser_info: JSON.stringify(event.browserInfo || {}),
-            country_code: event.countryCode || event.eventData?.countryCode || 'unknown'
+            country_code: serverCountryCode || event.countryCode || event.eventData?.countryCode || 'US'
           })),
           format: 'JSONEachRow',
         });
-        console.log('✅ Events flushed to ClickHouse with country_code');
+        console.log(`✅ Events flushed to ClickHouse (visitor: ${bodyVisitorId || events[0]?.visitorId}, country: ${serverCountryCode})`);
       } catch (chError) {
         console.error('⚠️ ClickHouse insert failed (continuing):', chError.message);
       }
 
-      // Log the events for now (in production, save to database)
+      // Also insert page_view events to page_views table for visitor tracking
+      const pageViewEvents = events.filter(e => e.eventType === 'page_view');
+      if (pageViewEvents.length > 0) {
+        try {
+          await clickhouse.insert({
+            table: 'page_views',
+            values: pageViewEvents.map(event => ({
+              visitor_id: event.visitorId || bodyVisitorId || '',
+              session_id: event.sessionId || bodySessionId || '',
+              page_url: event.pageContext?.url || event.pageUrl || '',
+              page_path: event.pageContext?.pathname || new URL(event.pageUrl || 'http://localhost').pathname || '',
+              page_title: event.pageContext?.title || event.eventData?.title || '',
+              referrer: event.pageContext?.referrer || event.eventData?.referrer || '',
+              timestamp: new Date().toISOString(),
+              time_on_page_ms: 0,
+              scroll_depth: 0,
+              country_code: serverCountryCode || event.countryCode || 'US',
+              device_type: event.deviceType || 'desktop',
+              browser: event.browserInfo?.browser || ''
+            })),
+            format: 'JSONEachRow',
+          });
+          console.log(`✅ Page views tracked for visitor: ${bodyVisitorId || pageViewEvents[0]?.visitorId}`);
+        } catch (pvError) {
+          console.error('⚠️ Page views insert failed:', pvError.message);
+        }
+      }
+
+      // Update or create visitor record
+      const firstEvent = events[0];
+      const visitorId = firstEvent?.visitorId || bodyVisitorId;
+      if (visitorId) {
+        try {
+          // Use ReplacingMergeTree - insert will update existing record
+          await clickhouse.insert({
+            table: 'visitors',
+            values: [{
+              visitor_id: visitorId,
+              anonymous_name: firstEvent?.anonymousName || '',
+              last_seen: new Date().toISOString(),
+              country_code: serverCountryCode || firstEvent?.countryCode || 'US',
+              primary_device: firstEvent?.deviceType || 'desktop',
+              primary_browser: firstEvent?.browserInfo?.browser || ''
+            }],
+            format: 'JSONEachRow',
+          });
+        } catch (visitorError) {
+          // Silently fail - visitor might already exist
+        }
+      }
+
       events.forEach(event => {
-        console.log('📊 Event:', event.eventType, event.countryCode || 'unknown', event.pageContext?.pathname || event.pageUrl);
+        console.log('📊 Event:', event.eventType, serverCountryCode, event.pageContext?.pathname || event.pageUrl);
       });
     }
     
@@ -824,7 +940,7 @@ app.all('/api/hierarchical-scrape', async (req, res) => {
 // Journey tracking endpoint (cookie-free analytics)
 app.post('/api/journey-update', async (req, res) => {
   try {
-    const { sessionId, analytics, journey, isFinal } = req.body;
+    const { sessionId, visitorId, anonymousName, analytics, journey, isFinal } = req.body;
     
     if (!sessionId || !analytics) {
       return res.status(400).json({
@@ -833,30 +949,67 @@ app.post('/api/journey-update', async (req, res) => {
       });
     }
 
-    console.log(`📊 Journey update received: ${sessionId} (${analytics.intentLevel} intent, ${analytics.pageCount} pages)`);
+    const effectiveVisitorId = visitorId || analytics.visitorId || sessionId;
+    const effectiveName = anonymousName || analytics.anonymousName || '';
+
+    console.log(`📊 Journey update received: visitor=${effectiveVisitorId}, session=${sessionId} (${analytics.intentLevel} intent, ${analytics.pageCount} pages)`);
 
     // Dual-write to ClickHouse
     try {
-      const countryCode = analytics.countryCode || analytics.country || 'unknown';
-      console.log(`📊 Journey update with country: ${countryCode}`);
+      // Get country code from client IP (server-side geolocation)
+      const clientIP = getClientIP(req);
+      const countryCode = await getCountryFromIP(clientIP) || analytics.countryCode || analytics.country || 'US';
+      console.log(`📊 Journey update with country: ${countryCode} (IP: ${clientIP})`);
       
       await clickhouse.insert({
         table: 'visitor_journeys',
         values: [{
           session_id: sessionId,
-          visitor_id: analytics.visitorId || sessionId,
+          visitor_id: effectiveVisitorId,
+          anonymous_name: effectiveName,
           start_time: analytics.startTime ? new Date(analytics.startTime).toISOString() : new Date().toISOString(),
           end_time: new Date().toISOString(),
           page_count: analytics.pageCount || 1,
           event_count: analytics.eventCount || 0,
           device_type: analytics.deviceType || 'desktop',
+          browser: analytics.browser || analytics.device?.browser || '',
           country_code: countryCode,
           utm_source: analytics.utmSource || analytics.utm?.source || '',
-          utm_campaign: analytics.utmCampaign || analytics.utm?.campaign || ''
+          utm_campaign: analytics.utmCampaign || analytics.utm?.campaign || '',
+          is_active: isFinal ? 0 : 1
         }],
         format: 'JSONEachRow'
       });
       console.log('✅ Journey written to ClickHouse');
+
+      // Update visitor record
+      await clickhouse.insert({
+        table: 'visitors',
+        values: [{
+          visitor_id: effectiveVisitorId,
+          anonymous_name: effectiveName,
+          last_seen: new Date().toISOString(),
+          country_code: countryCode,
+          primary_device: analytics.deviceType || 'desktop',
+          primary_browser: analytics.browser || ''
+        }],
+        format: 'JSONEachRow'
+      });
+
+      // Update visitor activity for heatmap
+      await clickhouse.insert({
+        table: 'visitor_activity',
+        values: [{
+          visitor_id: effectiveVisitorId,
+          activity_date: new Date().toISOString().split('T')[0],
+          event_count: analytics.eventCount || 0,
+          page_view_count: analytics.pageCount || 1,
+          session_count: 1,
+          total_time_ms: analytics.sessionDuration || 0
+        }],
+        format: 'JSONEachRow'
+      });
+      
     } catch (chError) {
       console.error('⚠️ ClickHouse journey insert failed:', chError.message);
     }
@@ -864,7 +1017,7 @@ app.post('/api/journey-update', async (req, res) => {
     // Call Supabase function to update journey
     const { data, error } = await supabaseServiceRole.rpc('update_journey_from_client', {
       p_session_id: sessionId,
-      p_analytics: analytics,
+      p_analytics: { ...analytics, visitorId: effectiveVisitorId, anonymousName: effectiveName },
       p_pages: journey?.pages || null,
       p_is_final: isFinal || false
     });
@@ -883,6 +1036,7 @@ app.post('/api/journey-update', async (req, res) => {
     res.json({
       success: true,
       journeyId: data,
+      visitorId: effectiveVisitorId,
       sessionId,
       timestamp: new Date().toISOString()
     });
@@ -1020,6 +1174,240 @@ app.get('/api/journey-analytics/high-intent', async (req, res) => {
       success: false,
       error: 'Failed to fetch high-intent journeys'
     });
+  }
+});
+
+// --- Visitor API Endpoints ---
+
+// Get all visitors (paginated)
+app.get('/api/visitors', async (req, res) => {
+  try {
+    const { limit = 50, offset = 0, country } = req.query;
+    
+    let query = `
+      SELECT 
+        visitor_id,
+        anonymous_name,
+        first_seen,
+        last_seen,
+        total_sessions,
+        total_page_views,
+        country_code,
+        primary_device,
+        primary_browser
+      FROM visitors
+      ${country ? 'WHERE country_code = {country:String}' : ''}
+      ORDER BY last_seen DESC
+      LIMIT {limit:UInt32}
+      OFFSET {offset:UInt32}
+    `;
+    
+    const resultSet = await clickhouse.query({
+      query,
+      query_params: { 
+        limit: parseInt(limit), 
+        offset: parseInt(offset),
+        country: country || ''
+      },
+      format: 'JSONEachRow'
+    });
+    
+    const visitors = await resultSet.json();
+    
+    // Get total count
+    const countResult = await clickhouse.query({
+      query: `SELECT count() as total FROM visitors ${country ? 'WHERE country_code = {country:String}' : ''}`,
+      query_params: { country: country || '' },
+      format: 'JSONEachRow'
+    });
+    const countData = await countResult.json();
+    
+    res.json({
+      success: true,
+      visitors,
+      total: parseInt(countData[0]?.total || 0),
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error fetching visitors:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch visitors' });
+  }
+});
+
+// Get single visitor with sessions
+app.get('/api/visitors/:visitorId', async (req, res) => {
+  try {
+    const { visitorId } = req.params;
+    
+    // Get visitor info
+    const visitorResult = await clickhouse.query({
+      query: `
+        SELECT 
+          visitor_id,
+          anonymous_name,
+          first_seen,
+          last_seen,
+          total_sessions,
+          total_page_views,
+          country_code,
+          primary_device,
+          primary_browser
+        FROM visitors
+        WHERE visitor_id = {visitorId:String}
+        LIMIT 1
+      `,
+      query_params: { visitorId },
+      format: 'JSONEachRow'
+    });
+    const visitorData = await visitorResult.json();
+    
+    if (visitorData.length === 0) {
+      return res.status(404).json({ success: false, error: 'Visitor not found' });
+    }
+    
+    // Get visitor sessions
+    const sessionsResult = await clickhouse.query({
+      query: `
+        SELECT 
+          session_id,
+          start_time,
+          end_time,
+          page_count,
+          event_count,
+          device_type,
+          browser,
+          country_code,
+          is_active
+        FROM visitor_journeys
+        WHERE visitor_id = {visitorId:String}
+        ORDER BY start_time DESC
+        LIMIT 50
+      `,
+      query_params: { visitorId },
+      format: 'JSONEachRow'
+    });
+    const sessions = await sessionsResult.json();
+    
+    // Get page views for visitor
+    const pagesResult = await clickhouse.query({
+      query: `
+        SELECT 
+          session_id,
+          page_path,
+          page_title,
+          timestamp,
+          time_on_page_ms,
+          scroll_depth
+        FROM page_views
+        WHERE visitor_id = {visitorId:String}
+        ORDER BY timestamp DESC
+        LIMIT 100
+      `,
+      query_params: { visitorId },
+      format: 'JSONEachRow'
+    });
+    const pages = await pagesResult.json();
+    
+    // Get activity heatmap data (last 6 months)
+    const activityResult = await clickhouse.query({
+      query: `
+        SELECT 
+          activity_date,
+          event_count,
+          page_view_count,
+          session_count
+        FROM visitor_activity
+        WHERE visitor_id = {visitorId:String}
+          AND activity_date >= today() - 180
+        ORDER BY activity_date DESC
+      `,
+      query_params: { visitorId },
+      format: 'JSONEachRow'
+    });
+    const activity = await activityResult.json();
+    
+    res.json({
+      success: true,
+      visitor: visitorData[0],
+      sessions,
+      pages,
+      activity,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error fetching visitor:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch visitor' });
+  }
+});
+
+// Get visitors by country
+app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
+  try {
+    const { countryCode } = req.params;
+    const { limit = 50 } = req.query;
+    
+    const resultSet = await clickhouse.query({
+      query: `
+        SELECT 
+          visitor_id,
+          anonymous_name,
+          first_seen,
+          last_seen,
+          total_sessions,
+          country_code,
+          primary_device,
+          primary_browser
+        FROM visitors
+        WHERE country_code = {countryCode:String}
+        ORDER BY last_seen DESC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: { countryCode, limit: parseInt(limit) },
+      format: 'JSONEachRow'
+    });
+    
+    const visitors = await resultSet.json();
+    
+    // Get recent sessions for these visitors
+    const visitorIds = visitors.map(v => v.visitor_id);
+    let recentSessions = [];
+    
+    if (visitorIds.length > 0) {
+      const sessionsResult = await clickhouse.query({
+        query: `
+          SELECT 
+            visitor_id,
+            session_id,
+            start_time,
+            end_time,
+            page_count,
+            is_active,
+            browser
+          FROM visitor_journeys
+          WHERE visitor_id IN ({visitorIds:Array(String)})
+            AND start_time >= now() - INTERVAL 24 HOUR
+          ORDER BY start_time DESC
+          LIMIT 100
+        `,
+        query_params: { visitorIds },
+        format: 'JSONEachRow'
+      });
+      recentSessions = await sessionsResult.json();
+    }
+    
+    res.json({
+      success: true,
+      countryCode,
+      visitors,
+      recentSessions,
+      total: visitors.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error fetching visitors by country:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch visitors' });
   }
 });
 

@@ -2,7 +2,8 @@
  * Enhanced Element-Based Event Tracking System with Workflow Integration
  * Client-side tracking script that integrates with workflow execution engine
  * 
- * This script combines element tracking with workflow automation for complete personalization
+ * This script combines element tracking with workflow automation for complete personalization.
+ * Uses unified VisitorIdentity for consistent visitor/session tracking.
  */
 
 (function() {
@@ -31,16 +32,94 @@
       this.observers = new Map();
       this.throttledEvents = new Map();
       this.processingTimer = null;
-      this.sessionId = this.generateSessionId();
+      this.workflowExecutor = null;
+      
+      // Use unified identity system
+      this.initializeIdentity();
+      
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
-      this.workflowExecutor = null;
       this.sessionData = this.initializeSessionData();
       
+      console.log('🎯 Enhanced Element Tracker: Visitor ID:', this.visitorId);
       console.log('🎯 Enhanced Element Tracker: Session ID:', this.sessionId);
       console.log('🎯 Enhanced Element Tracker: Page Context:', this.pageContext);
       
       this.init();
+    }
+
+    /**
+     * Initialize visitor and session identity using unified system
+     */
+    initializeIdentity() {
+      // Check if VisitorIdentity is available
+      if (typeof window !== 'undefined' && window.VisitorIdentity) {
+        const identity = window.VisitorIdentity.getIdentity();
+        this.visitorId = identity.visitorId;
+        this.sessionId = identity.sessionId;
+        console.log('🎯 Enhanced Element Tracker: Using unified VisitorIdentity');
+      } else {
+        // Fallback to localStorage/sessionStorage directly
+        this.visitorId = this.getOrCreateVisitorId();
+        this.sessionId = this.getOrCreateSessionId();
+        console.log('🎯 Enhanced Element Tracker: Using fallback identity');
+      }
+    }
+
+    /**
+     * Fallback: Get or create persistent visitor ID
+     */
+    getOrCreateVisitorId() {
+      const key = 'tf_visitor_id';
+      try {
+        let visitorId = localStorage.getItem(key);
+        if (!visitorId) {
+          visitorId = 'v_' + Date.now().toString(36) + '_' + this.generateRandomId(12);
+          localStorage.setItem(key, visitorId);
+        }
+        return visitorId;
+      } catch (e) {
+        return 'temp_' + this.generateRandomId(16);
+      }
+    }
+
+    /**
+     * Fallback: Get or create session ID
+     */
+    getOrCreateSessionId() {
+      const key = 'tf_session_id';
+      const activityKey = 'tf_last_activity';
+      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+      
+      try {
+        let sessionId = sessionStorage.getItem(key);
+        const lastActivity = sessionStorage.getItem(activityKey);
+        
+        const isValid = sessionId && lastActivity && 
+          (Date.now() - parseInt(lastActivity, 10)) < SESSION_TIMEOUT;
+        
+        if (!isValid) {
+          sessionId = 's_' + Date.now().toString(36) + '_' + this.generateRandomId(8);
+          sessionStorage.setItem(key, sessionId);
+        }
+        
+        sessionStorage.setItem(activityKey, Date.now().toString());
+        return sessionId;
+      } catch (e) {
+        return 'temp_s_' + this.generateRandomId(12);
+      }
+    }
+
+    /**
+     * Generate random ID string
+     */
+    generateRandomId(length = 16) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return result;
     }
 
     init() {
@@ -75,7 +154,7 @@
         this.workflowExecutor = new window.WorkflowExecutor({
           apiEndpoint: this.config.workflowEndpoint,
           debug: this.config.debug,
-          hideContentDuringInit: this.config.hideContentDuringInit !== false, // Default true unless explicitly disabled
+          hideContentDuringInit: this.config.hideContentDuringInit !== false,
           maxInitTime: this.config.maxInitTime || 3000
         });
         
@@ -95,38 +174,31 @@
         
       } catch (error) {
         console.error('🎯 Enhanced Element Tracker: Failed to initialize workflow system:', error);
-        // Continue with basic tracking even if workflows fail
       }
     }
 
     async loadWorkflowExecutor() {
       return new Promise((resolve, reject) => {
-        // Check if already loaded
         if (window.WorkflowExecutor) {
           resolve();
           return;
         }
         
-        // Create script element
         const script = document.createElement('script');
         script.src = `${this.config.workflowEndpoint}/workflow-executor.js`;
         script.onload = resolve;
         script.onerror = reject;
         
-        // Add to head
         document.head.appendChild(script);
       });
     }
 
     setupWorkflowEventForwarding() {
-      // Override addEvent to also forward to workflow executor
       const originalAddEvent = this.addEvent.bind(this);
       
       this.addEvent = (event) => {
-        // Add to normal tracking queue
         originalAddEvent(event);
         
-        // Forward to workflow executor for real-time processing
         if (this.workflowExecutor) {
           const workflowEventData = this.prepareWorkflowEventData(event);
           this.workflowExecutor.handleEvent(workflowEventData);
@@ -144,6 +216,7 @@
         timeOnPage: Math.floor((Date.now() - this.sessionData.sessionStart) / 1000),
         scrollPercentage: this.getCurrentScrollPercentage(),
         deviceType: this.userContext.deviceType,
+        visitorId: this.visitorId,
         ...event.eventData,
         ...this.pageContext,
         ...this.userContext
@@ -168,13 +241,11 @@
       };
       
       try {
-        // Get or create session data
         const existingSession = localStorage.getItem(sessionKey);
         const existingVisits = localStorage.getItem(visitKey);
         
         if (existingSession) {
           const parsed = JSON.parse(existingSession);
-          // Check if session is still valid (within 30 minutes)
           if (Date.now() - parsed.sessionStart < 30 * 60 * 1000) {
             sessionData = {
               ...parsed,
@@ -188,7 +259,6 @@
           sessionData.totalVisits = parseInt(existingVisits) + (sessionData.pageViews === 1 ? 1 : 0);
         }
         
-        // Store updated session data
         localStorage.setItem(sessionKey, JSON.stringify(sessionData));
         localStorage.setItem(visitKey, sessionData.totalVisits.toString());
         
@@ -197,10 +267,6 @@
       }
       
       return sessionData;
-    }
-
-    generateSessionId() {
-      return 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
 
     getPageContext() {
@@ -240,6 +306,7 @@
       const pageViewEvent = {
         eventType: 'page_view',
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         pageContext: this.pageContext,
         userContext: this.userContext,
@@ -250,7 +317,6 @@
       console.log('📊 Enhanced Element Tracker: Page view tracked with session data');
     }
 
-    // Enhanced tracking with workflow integration
     track(selector, eventTypes = ['click'], config = {}) {
       console.log(`🎯 Enhanced Element Tracker: Setting up tracking for "${selector}" with events:`, eventTypes);
       
@@ -284,6 +350,11 @@
       return (event) => {
         const elementId = this.getElementId(element, selector);
         
+        // Update activity timestamp
+        if (window.VisitorIdentity) {
+          window.VisitorIdentity.updateActivity();
+        }
+        
         const trackedEvent = {
           eventType: eventType,
           elementId: elementId,
@@ -292,6 +363,7 @@
           elementText: element.textContent?.trim() || '',
           elementAttributes: this.getElementAttributes(element),
           timestamp: Date.now(),
+          visitorId: this.visitorId,
           sessionId: this.sessionId,
           eventData: this.extractEventData(event, element, eventType),
           pageContext: this.pageContext,
@@ -307,7 +379,6 @@
       };
     }
 
-    // All other methods from original elementTracker.js remain the same...
     trackForms(formSelector = 'form') {
       this.trackFormInteractions(formSelector);
     }
@@ -320,12 +391,10 @@
       forms.forEach((form, formIndex) => {
         const formId = this.getElementId(form, formSelector, formIndex);
         
-        // Track form submission
         form.addEventListener('submit', (e) => {
           this.trackFormSubmission(form, formId, e);
         });
 
-        // Track field interactions
         const fields = form.querySelectorAll('input, textarea, select');
         fields.forEach((field, fieldIndex) => {
           const fieldId = this.getElementId(field, `${formSelector} input`, fieldIndex);
@@ -378,7 +447,6 @@
       this.observers.set(selector, observer);
     }
 
-    // Implement all other methods from the original elementTracker.js...
     trackFormSubmission(form, formId, event) {
       const formData = new FormData(form);
       const formFields = {};
@@ -393,6 +461,7 @@
         elementSelector: this.getElementSelector(form),
         elementTag: 'form',
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         eventData: {
           formFields: formFields,
@@ -416,6 +485,7 @@
         elementSelector: this.getElementSelector(field),
         elementTag: field.tagName.toLowerCase(),
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         eventData: {
           fieldName: field.name,
@@ -455,6 +525,7 @@
         elementTag: element.tagName.toLowerCase(),
         elementText: element.textContent?.trim() || '',
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         eventData: {
           visibilityPercentage: Math.round(intersectionRatio * 100),
@@ -498,7 +569,6 @@
       }
     }
 
-    // Utility methods
     getElementId(element, selector, index = 0) {
       if (element.id) {
         return element.id;
@@ -585,7 +655,11 @@
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ events, sessionId: this.sessionId })
+          body: JSON.stringify({ 
+            events, 
+            visitorId: this.visitorId,
+            sessionId: this.sessionId 
+          })
         });
 
         if (!response.ok) {
@@ -598,38 +672,31 @@
 
       } catch (error) {
         console.error('📊 Enhanced Element Tracker: Failed to send events:', error);
-        // Re-queue events for retry (implement retry logic as needed)
       }
     }
 
     destroy() {
-      // Remove all event listeners
       this.eventListeners.forEach(listeners => {
         listeners.forEach(({ element, eventType, listener }) => {
           element.removeEventListener(eventType, listener);
         });
       });
 
-      // Disconnect all observers
       this.observers.forEach(observer => {
         observer.disconnect();
       });
 
-      // Process remaining events
       this.processBatch(true);
 
       console.log('🎯 Enhanced Element Tracker: Destroyed');
     }
 
     setupLegacyWorkflowTriggers(workflowId) {
-      // Override addEvent to also check triggers via API
       const originalAddEvent = this.addEvent.bind(this);
       
       this.addEvent = async (event) => {
-        // Add to normal tracking queue
         originalAddEvent(event);
         
-        // Check workflow triggers via API for specific workflow
         if (workflowId && workflowId !== 'element-tracking-demo' && workflowId !== 'test-workflow-123') {
           try {
             const triggerUrl = this.config.apiEndpoint.replace('/analytics/track', '/workflows/trigger-check');
@@ -649,7 +716,6 @@
               
               if (result.triggered && result.actions && result.actions.length > 0) {
                 console.log('🔄 Legacy Workflow Triggered:', result.actions);
-                // Execute actions using the legacy format
                 this.executeLegacyWorkflowActions(result.actions);
               }
             }
@@ -661,7 +727,6 @@
     }
 
     executeLegacyWorkflowActions(actions) {
-      // Execute actions in the legacy format
       actions.forEach(action => {
         setTimeout(() => {
           this.executeLegacyAction(action);
@@ -751,22 +816,14 @@
   if (!window.elementTracker) {
     window.elementTracker = new EnhancedElementTracker();
     
-    // Auto-track common elements after initialization
     setTimeout(() => {
-      // Track all buttons and CTAs
       window.elementTracker.track('button, .btn, .cta, [role="button"]', ['click']);
-      
-      // Track all links
       window.elementTracker.track('a[href]', ['click']);
-      
-      // Track all forms
       window.elementTracker.trackForms();
-      
-      // Track main content areas for visibility
       window.elementTracker.trackVisibility('main, .main-content, .content, article');
       
       console.log('🎯 Enhanced Element Tracker: Auto-tracking initialized for common elements');
     }, 1000);
   }
 
-})(); 
+})();

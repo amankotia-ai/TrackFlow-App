@@ -3,61 +3,192 @@
  * Uses only sessionStorage, localStorage, and in-memory state
  * 100% GDPR-friendly, no cookies required
  * 
+ * Uses unified VisitorIdentity for consistent visitor/session tracking.
+ * 
  * Usage:
  * const tracker = new CookieFreeJourneyTracker({
- *   apiEndpoint: 'https://your-domain.com/api', // Base API URL (not /api/journey)
+ *   apiEndpoint: 'https://your-domain.com/api',
  *   enableTracking: true,
  *   debug: true
  * });
- * // Note: Tracker auto-initializes, no need to call .initialize()
  * 
  * Storage Strategy:
- * - sessionStorage: Current journey (expires when browser closes)
- * - localStorage: Visit count, first visit date, UTM attribution
+ * - localStorage: Persistent visitor ID, visit count, first visit date, UTM
+ * - sessionStorage: Current session ID, journey (expires when browser closes)
  * - In-memory: Real-time interactions, scroll depth
  */
 
 (function() {
   'use strict';
+
+  // Storage keys
+  const STORAGE_PREFIX = 'tf_';
+  const VISITOR_ID_KEY = STORAGE_PREFIX + 'visitor_id';
+  const VISITOR_NAME_KEY = STORAGE_PREFIX + 'visitor_name';
+  const FIRST_SEEN_KEY = STORAGE_PREFIX + 'first_seen';
+  const SESSION_COUNT_KEY = STORAGE_PREFIX + 'session_count';
+  const SESSION_ID_KEY = STORAGE_PREFIX + 'session_id';
+  const LAST_ACTIVITY_KEY = STORAGE_PREFIX + 'last_activity';
+
+  // Session timeout in milliseconds (30 minutes)
+  const SESSION_TIMEOUT = 30 * 60 * 1000;
+
+  /**
+   * Generate random ID string
+   */
+  function generateRandomId(length = 16) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    try {
+      const array = new Uint8Array(length);
+      crypto.getRandomValues(array);
+      for (let i = 0; i < length; i++) {
+        result += chars[array[i] % chars.length];
+      }
+    } catch (e) {
+      for (let i = 0; i < length; i++) {
+        result += chars[Math.floor(Math.random() * chars.length)];
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get or create persistent visitor ID
+   */
+  function getOrCreateVisitorId() {
+    try {
+      let visitorId = localStorage.getItem(VISITOR_ID_KEY);
+      
+      if (!visitorId) {
+        visitorId = 'v_' + Date.now().toString(36) + '_' + generateRandomId(12);
+        localStorage.setItem(VISITOR_ID_KEY, visitorId);
+        localStorage.setItem(FIRST_SEEN_KEY, Date.now().toString());
+        localStorage.setItem(SESSION_COUNT_KEY, '0');
+      }
+      
+      return visitorId;
+    } catch (error) {
+      return 'temp_' + generateRandomId(16);
+    }
+  }
+
+  /**
+   * Get or create session ID
+   */
+  function getOrCreateSessionId() {
+    try {
+      let sessionId = sessionStorage.getItem(SESSION_ID_KEY);
+      const lastActivity = sessionStorage.getItem(LAST_ACTIVITY_KEY);
+      
+      const isValid = sessionId && lastActivity && 
+        (Date.now() - parseInt(lastActivity, 10)) < SESSION_TIMEOUT;
+      
+      if (!isValid) {
+        sessionId = 's_' + Date.now().toString(36) + '_' + generateRandomId(8);
+        sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+        
+        // Increment session count
+        const currentCount = parseInt(localStorage.getItem(SESSION_COUNT_KEY) || '0', 10);
+        localStorage.setItem(SESSION_COUNT_KEY, (currentCount + 1).toString());
+      }
+      
+      sessionStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+      return sessionId;
+    } catch (error) {
+      return 'temp_s_' + generateRandomId(12);
+    }
+  }
+
+  /**
+   * Generate anonymous name from visitor ID (deterministic)
+   */
+  function generateAnonymousName(visitorId) {
+    const adjectives = [
+      'Useful', 'Clever', 'Swift', 'Happy', 'Bright', 'Brave', 'Calm', 'Daring',
+      'Eager', 'Fancy', 'Gentle', 'Handy', 'Jolly', 'Kind', 'Lucky', 'Merry',
+      'Noble', 'Peppy', 'Quick', 'Rapid', 'Savvy', 'Steady', 'Tender', 'Vivid'
+    ];
+    const animals = [
+      'Mule', 'Fox', 'Eagle', 'Dolphin', 'Owl', 'Wolf', 'Bear', 'Tiger',
+      'Lion', 'Falcon', 'Hawk', 'Raven', 'Otter', 'Beaver', 'Badger', 'Panda',
+      'Koala', 'Sloth', 'Gecko', 'Toucan', 'Parrot', 'Penguin', 'Seal', 'Moose'
+    ];
+
+    let hash = 0;
+    for (let i = 0; i < visitorId.length; i++) {
+      hash = ((hash << 5) - hash) + visitorId.charCodeAt(i);
+      hash = hash & hash;
+    }
+    hash = Math.abs(hash);
+
+    const adjIndex = hash % adjectives.length;
+    const animalIndex = Math.floor(hash / adjectives.length) % animals.length;
+
+    return `${adjectives[adjIndex]} ${animals[animalIndex]}`;
+  }
   
   class CookieFreeJourneyTracker {
     constructor(config = {}) {
       this.config = {
         maxJourneyLength: 50,
-        sessionTimeout: 30 * 60 * 1000, // 30 minutes
-        storagePrefix: 'tf_journey_', // TrackFlow journey prefix
-        enableCrossTab: true, // Sync across tabs using storage events
+        sessionTimeout: SESSION_TIMEOUT,
+        storagePrefix: 'tf_journey_',
+        enableCrossTab: true,
         debug: false,
         apiEndpoint: config.apiEndpoint || null,
         ...config
       };
       
-      // In-memory state (reset on page load)
+      // Initialize unified identity
+      this.visitorId = getOrCreateVisitorId();
+      this.sessionId = getOrCreateSessionId();
+      this.anonymousName = this.getOrCreateAnonymousName();
+      
+      // In-memory state
       this.currentPageStartTime = Date.now();
       this.pageInteractions = [];
       this.scrollDepth = 0;
       this.maxScrollDepth = 0;
-      this.geolocationData = null; // Store geolocation data
+      this.geolocationData = null;
       
-      // Load or create journey from sessionStorage
+      // Load or create journey
       this.journey = this.loadJourneyFromSession();
       
       // Setup tracking
       this.setupTracking();
       
-      // Fetch geolocation first, then track page visit
+      // Fetch geolocation then track page
       this.fetchGeolocation().then(() => {
         this.trackPageVisit();
       });
       
       this.log('✅ Cookie-Free Journey Tracker initialized');
+      this.log(`🆔 Visitor ID: ${this.visitorId}`);
+      this.log(`🔄 Session ID: ${this.sessionId}`);
+      this.log(`👤 Anonymous Name: ${this.anonymousName}`);
+    }
+
+    /**
+     * Get or create anonymous name for this visitor
+     */
+    getOrCreateAnonymousName() {
+      try {
+        let name = localStorage.getItem(VISITOR_NAME_KEY);
+        if (!name) {
+          name = generateAnonymousName(this.visitorId);
+          localStorage.setItem(VISITOR_NAME_KEY, name);
+        }
+        return name;
+      } catch (e) {
+        return generateAnonymousName(this.visitorId);
+      }
     }
 
     /**
      * Fetch geolocation data via IP-based service
      */
     async fetchGeolocation() {
-      // Check cache first
       const cached = sessionStorage.getItem(this.config.storagePrefix + 'geo');
       if (cached) {
         try {
@@ -85,7 +216,6 @@
             timezone: data.timezone || ''
           };
           
-          // Cache for the session
           sessionStorage.setItem(
             this.config.storagePrefix + 'geo',
             JSON.stringify(this.geolocationData)
@@ -99,13 +229,9 @@
       }
     }
 
-    /**
-     * Initialize method (for backward compatibility)
-     * The tracker auto-initializes in the constructor, so this method is not needed
-     */
     initialize() {
-      this.log('ℹ️ .initialize() called but not needed - tracker already initialized in constructor', 'warning');
-      return this; // Allow chaining
+      this.log('ℹ️ .initialize() called but not needed - tracker already initialized', 'warning');
+      return this;
     }
 
     log(message, level = 'info', data = null) {
@@ -122,9 +248,6 @@
       if (data) console.log(data);
     }
 
-    /**
-     * Load journey from sessionStorage (expires when browser closes)
-     */
     loadJourneyFromSession() {
       try {
         const key = this.config.storagePrefix + 'session';
@@ -133,15 +256,17 @@
         if (stored) {
           const journey = JSON.parse(stored);
           
-          // Check if session is still active (within timeout)
           const timeSinceLastActivity = Date.now() - journey.lastActivityAt;
           if (timeSinceLastActivity < this.config.sessionTimeout) {
+            // Update with current identity
+            journey.visitorId = this.visitorId;
+            journey.sessionId = this.sessionId;
+            journey.anonymousName = this.anonymousName;
             this.log('📖 Restored journey from sessionStorage');
             return journey;
           }
         }
         
-        // Create new journey if no valid session exists
         return this.createNewJourney();
       } catch (error) {
         this.log('❌ Error loading journey: ' + error.message, 'error');
@@ -149,14 +274,11 @@
       }
     }
 
-    /**
-     * Create new journey object
-     */
     createNewJourney() {
-      const sessionId = this.generateSessionId();
-      
       const journey = {
-        sessionId,
+        visitorId: this.visitorId,
+        sessionId: this.sessionId,
+        anonymousName: this.anonymousName,
         startedAt: Date.now(),
         lastActivityAt: Date.now(),
         pages: [],
@@ -169,7 +291,7 @@
         metadata: {
           intentScore: 0,
           intentLevel: 'low',
-          visitNumber: this.incrementVisitCount(),
+          visitNumber: this.getVisitCount(),
           daysSinceFirstVisit: this.getDaysSinceFirstVisit()
         }
       };
@@ -179,20 +301,17 @@
       return journey;
     }
 
-    /**
-     * Save journey to sessionStorage (session-only persistence)
-     */
     saveJourneyToSession(journey) {
       try {
         const key = this.config.storagePrefix + 'session';
         sessionStorage.setItem(key, JSON.stringify(journey));
         
-        // Broadcast to other tabs if enabled
         if (this.config.enableCrossTab) {
           localStorage.setItem(
             this.config.storagePrefix + 'sync',
             JSON.stringify({
               timestamp: Date.now(),
+              visitorId: journey.visitorId,
               sessionId: journey.sessionId,
               action: 'journey_updated'
             })
@@ -203,73 +322,26 @@
       }
     }
 
-    /**
-     * Generate unique session ID (no cookies)
-     */
-    generateSessionId() {
-      // Check if session ID already exists in sessionStorage
-      const key = this.config.storagePrefix + 'sid';
-      let sessionId = sessionStorage.getItem(key);
-      
-      if (!sessionId) {
-        // Generate new session ID using timestamp + random
-        sessionId = 's_' + Date.now() + '_' + this.generateRandomId();
-        sessionStorage.setItem(key, sessionId);
-      }
-      
-      return sessionId;
-    }
-
-    /**
-     * Generate random ID component
-     */
-    generateRandomId() {
-      return Math.random().toString(36).substring(2, 11) + 
-             Math.random().toString(36).substring(2, 11);
-    }
-
-    /**
-     * Increment visit count in localStorage (persistent across sessions)
-     */
-    incrementVisitCount() {
-      const key = this.config.storagePrefix + 'visit_count';
-      const currentCount = parseInt(localStorage.getItem(key) || '0');
-      const newCount = currentCount + 1;
-      localStorage.setItem(key, newCount.toString());
-      
-      // Also store first visit timestamp
-      const firstVisitKey = this.config.storagePrefix + 'first_visit';
-      if (!localStorage.getItem(firstVisitKey)) {
-        localStorage.setItem(firstVisitKey, Date.now().toString());
-      }
-      
-      return newCount;
-    }
-
-    /**
-     * Get visit count
-     */
     getVisitCount() {
-      const key = this.config.storagePrefix + 'visit_count';
-      return parseInt(localStorage.getItem(key) || '1');
+      try {
+        return parseInt(localStorage.getItem(SESSION_COUNT_KEY) || '1', 10);
+      } catch (e) {
+        return 1;
+      }
     }
 
-    /**
-     * Get days since first visit
-     */
     getDaysSinceFirstVisit() {
-      const key = this.config.storagePrefix + 'first_visit';
-      const firstVisit = localStorage.getItem(key);
-      
-      if (!firstVisit) return 0;
-      
-      const daysDiff = (Date.now() - parseInt(firstVisit)) / (1000 * 60 * 60 * 24);
-      return Math.floor(daysDiff);
+      try {
+        const firstVisit = localStorage.getItem(FIRST_SEEN_KEY);
+        if (!firstVisit) return 0;
+        
+        const daysDiff = (Date.now() - parseInt(firstVisit, 10)) / (1000 * 60 * 60 * 24);
+        return Math.floor(daysDiff);
+      } catch (e) {
+        return 0;
+      }
     }
 
-    /**
-     * Track current page visit
-     */
     trackPageVisit() {
       const pageData = {
         path: window.location.pathname,
@@ -288,17 +360,14 @@
         }
       };
 
-      // Calculate time on previous page
       if (this.journey.pages.length > 0) {
         const previousPage = this.journey.pages[this.journey.pages.length - 1];
         previousPage.exitedAt = Date.now();
         previousPage.timeOnPage = previousPage.exitedAt - previousPage.enteredAt;
       }
 
-      // Add new page
       this.journey.pages.push(pageData);
       
-      // Trim if exceeds max length
       if (this.journey.pages.length > this.config.maxJourneyLength) {
         this.journey.pages.shift();
       }
@@ -306,67 +375,57 @@
       this.journey.lastActivityAt = Date.now();
       this.saveJourneyToSession(this.journey);
       
-      // Calculate intent
       this.calculateIntentScore();
       
       this.log('📄 Page tracked: ' + pageData.path);
       
-      // Send to analytics endpoint if configured
       this.sendJourneyUpdate();
-
-      // Send immediate real-time page view for dashboard widget
       this.trackRealTimePageView(pageData);
     }
 
-    /**
-     * Send real-time page view to analytics endpoint
-     * This feeds the "Real-Time Users" dashboard widget directly
-     */
     trackRealTimePageView(pageData) {
-        if (!this.config.apiEndpoint) return;
+      if (!this.config.apiEndpoint) return;
 
-        try {
-            const countryCode = this.geolocationData?.countryCode || 'unknown';
-            
-            const payload = {
-                events: [{
-                    eventType: 'page_view',
-                    pageUrl: pageData.fullUrl,
-                    sessionId: this.journey.sessionId,
-                    timestamp: new Date().toISOString(),
-                    deviceType: this.getDeviceType(),
-                    countryCode: countryCode, // Include country code for globe visualization
-                    browserInfo: {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language
-                    },
-                    eventData: {
-                        title: pageData.title,
-                        referrer: pageData.referrer,
-                        country: this.geolocationData?.country || '',
-                        countryCode: countryCode
-                    }
-                }]
-            };
+      try {
+        const countryCode = this.geolocationData?.countryCode || 'unknown';
+        
+        const payload = {
+          events: [{
+            eventType: 'page_view',
+            pageUrl: pageData.fullUrl,
+            visitorId: this.visitorId,
+            sessionId: this.sessionId,
+            anonymousName: this.anonymousName,
+            timestamp: new Date().toISOString(),
+            deviceType: this.getDeviceType(),
+            countryCode: countryCode,
+            browserInfo: {
+              userAgent: navigator.userAgent,
+              language: navigator.language,
+              browser: this.getBrowserInfo()
+            },
+            eventData: {
+              title: pageData.title,
+              referrer: pageData.referrer,
+              country: this.geolocationData?.country || '',
+              countryCode: countryCode
+            }
+          }]
+        };
 
-            this.log(`📤 Sending page_view with country: ${countryCode}`);
+        this.log(`📤 Sending page_view with visitor: ${this.visitorId}, country: ${countryCode}`);
 
-            fetch(this.config.apiEndpoint + '/analytics/track', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                keepalive: true
-            }).catch(err => {
-                // Silent fail for real-time tracking to not disrupt main flow
-            });
-        } catch (e) {
-            // Ignore errors
-        }
+        fetch(this.config.apiEndpoint + '/analytics/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        }).catch(() => {});
+      } catch (e) {
+        // Ignore errors
+      }
     }
 
-    /**
-     * Track event (no cookies involved)
-     */
     trackEvent(eventData) {
       const event = {
         type: eventData.type || 'generic',
@@ -377,19 +436,14 @@
         page: window.location.pathname
       };
 
-      // Add to journey events
       this.journey.events.push(event);
-      
-      // Add to current page interactions (in memory)
       this.pageInteractions.push(event);
       
-      // Update current page interactions in journey
       if (this.journey.pages.length > 0) {
         const currentPage = this.journey.pages[this.journey.pages.length - 1];
         currentPage.interactions.push(event);
       }
 
-      // Check for intent signals
       if (this.isIntentSignal(event)) {
         this.journey.intentSignals.push(event);
         this.calculateIntentScore();
@@ -400,9 +454,6 @@
       this.saveJourneyToSession(this.journey);
     }
 
-    /**
-     * Detect buying intent signals
-     */
     isIntentSignal(event) {
       const intentPatterns = {
         paths: /pricing|checkout|cart|buy|purchase|signup|trial|demo|contact|order|payment|billing|plans|subscribe/i,
@@ -422,40 +473,23 @@
       );
     }
 
-    /**
-     * Calculate buying intent score
-     */
     calculateIntentScore() {
       let score = 0;
       
       const signals = {
-        // High-intent pages visited
         highIntentPages: this.journey.pages.filter(p => 
           /pricing|plans|checkout|cart|buy|purchase/i.test(p.path)
         ).length,
-        
-        // Form interactions
         formInteractions: this.journey.events.filter(e => 
           e.type.includes('form')
         ).length,
-        
-        // Time spent (minutes)
         totalTimeMinutes: (Date.now() - this.journey.startedAt) / (60 * 1000),
-        
-        // Page depth
         pageDepth: this.journey.pages.length,
-        
-        // Return visits
         visitNumber: this.journey.metadata.visitNumber,
-        
-        // Intent signals
         intentSignals: this.journey.intentSignals.length,
-        
-        // Average scroll depth
         avgScrollDepth: this.getAverageScrollDepth()
       };
 
-      // Weighted scoring
       if (signals.highIntentPages > 0) score += 0.25 * Math.min(signals.highIntentPages / 2, 1);
       if (signals.formInteractions > 0) score += 0.20 * Math.min(signals.formInteractions / 3, 1);
       if (signals.totalTimeMinutes > 2) score += 0.15 * Math.min(signals.totalTimeMinutes / 10, 1);
@@ -464,7 +498,7 @@
       if (signals.intentSignals > 0) score += 0.20 * Math.min(signals.intentSignals / 3, 1);
       if (signals.avgScrollDepth > 50) score += 0.10 * (signals.avgScrollDepth / 100);
 
-      score = Math.min(score, 1); // Cap at 1.0
+      score = Math.min(score, 1);
       
       this.journey.metadata.intentScore = score;
       this.journey.metadata.intentLevel = this.getIntentLevel(score);
@@ -475,18 +509,12 @@
       return score;
     }
 
-    /**
-     * Get intent level from score
-     */
     getIntentLevel(score) {
       if (score >= 0.7) return 'high';
       if (score >= 0.4) return 'medium';
       return 'low';
     }
 
-    /**
-     * Get average scroll depth across pages
-     */
     getAverageScrollDepth() {
       const pagesWithScroll = this.journey.pages.filter(p => p.scrollDepth > 0);
       if (pagesWithScroll.length === 0) return 0;
@@ -495,9 +523,6 @@
       return total / pagesWithScroll.length;
     }
 
-    /**
-     * Check if journey matches pattern
-     */
     matchesJourneyPattern(pattern) {
       const { pages, order } = pattern;
       const journeyPaths = this.journey.pages.map(p => p.path);
@@ -542,11 +567,7 @@
              path.startsWith(target);
     }
 
-    /**
-     * Setup automatic tracking (no cookies)
-     */
     setupTracking() {
-      // Track scroll depth
       let scrollThrottle;
       window.addEventListener('scroll', () => {
         clearTimeout(scrollThrottle);
@@ -563,7 +584,6 @@
         }, 200);
       });
 
-      // Track page exit
       window.addEventListener('beforeunload', () => {
         if (this.journey.pages.length > 0) {
           const currentPage = this.journey.pages[this.journey.pages.length - 1];
@@ -572,18 +592,15 @@
           currentPage.scrollDepth = this.scrollDepth;
           this.saveJourneyToSession(this.journey);
           
-          // Send final journey update
           this.sendJourneyUpdate(true);
         }
       });
 
-      // Track visibility changes (user switched tabs)
       document.addEventListener('visibilitychange', () => {
         this.journey.lastActivityAt = Date.now();
         this.saveJourneyToSession(this.journey);
       });
 
-      // Listen for storage events from other tabs
       if (this.config.enableCrossTab) {
         window.addEventListener('storage', (e) => {
           if (e.key === this.config.storagePrefix + 'sync') {
@@ -593,7 +610,6 @@
         });
       }
 
-      // Auto-save every 10 seconds
       setInterval(() => {
         if (this.journey.pages.length > 0) {
           const currentPage = this.journey.pages[this.journey.pages.length - 1];
@@ -603,11 +619,6 @@
       }, 10000);
     }
 
-    /**
-     * Send journey update to analytics endpoint
-     * Note: apiEndpoint should be base URL (e.g., 'https://domain.com/api')
-     * The method will append '/journey-update' to create the full path
-     */
     async sendJourneyUpdate(isFinal = false) {
       if (!this.config.apiEndpoint) {
         this.log('ℹ️ API endpoint not configured, skipping journey update', 'info');
@@ -618,7 +629,9 @@
         const analytics = this.getAnalytics();
         
         const payload = {
-          sessionId: this.journey.sessionId,
+          visitorId: this.visitorId,
+          sessionId: this.sessionId,
+          anonymousName: this.anonymousName,
           analytics,
           journey: {
             pages: this.journey.pages.map(p => ({
@@ -638,13 +651,11 @@
         const apiUrl = this.config.apiEndpoint + '/journey-update';
         this.log(`📤 Sending journey update to: ${apiUrl}`, 'info');
 
-        // Use sendBeacon for final update to ensure it goes through
         if (isFinal && navigator.sendBeacon) {
           const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
           const sent = navigator.sendBeacon(apiUrl, blob);
-          this.log(sent ? '✅ Final journey update sent via sendBeacon' : '⚠️ sendBeacon failed', sent ? 'success' : 'warning');
+          this.log(sent ? '✅ Final journey update sent' : '⚠️ sendBeacon failed', sent ? 'success' : 'warning');
         } else {
-          // Regular fetch for periodic updates
           fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -653,15 +664,10 @@
           })
           .then(response => {
             if (!response.ok) {
-              if (response.status === 404) {
-                this.log(`❌ API endpoint not found (404): ${apiUrl}. Check that apiEndpoint is set to base URL (e.g., 'https://domain.com/api' not 'https://domain.com/api/journey')`, 'error');
-              } else {
-                this.log(`❌ Journey update failed with status ${response.status}`, 'error');
-              }
+              this.log(`❌ Journey update failed with status ${response.status}`, 'error');
             } else {
               this.log('✅ Journey update sent successfully', 'success');
             }
-            return response.json();
           })
           .catch(err => {
             this.log('❌ Failed to send journey update: ' + err.message, 'error');
@@ -672,9 +678,6 @@
       }
     }
 
-    /**
-     * Capture UTM parameters from URL
-     */
     captureUTMParameters() {
       const params = new URLSearchParams(window.location.search);
       const utm = {
@@ -685,29 +688,22 @@
         content: params.get('utm_content')
       };
       
-      // Store UTM in localStorage for attribution across sessions
       if (Object.values(utm).some(v => v !== null)) {
         const key = this.config.storagePrefix + 'utm';
         localStorage.setItem(key, JSON.stringify(utm));
       } else {
-        // Try to restore previous UTM if current page has none
         const key = this.config.storagePrefix + 'utm';
         const stored = localStorage.getItem(key);
         if (stored) {
           try {
             return JSON.parse(stored);
-          } catch (e) {
-            // Ignore parse errors
-          }
+          } catch (e) {}
         }
       }
       
       return utm;
     }
 
-    /**
-     * Get device info (no cookies)
-     */
     getDeviceInfo() {
       return {
         type: this.getDeviceType(),
@@ -735,10 +731,11 @@
 
     getBrowserInfo() {
       const ua = navigator.userAgent;
+      if (ua.includes('DuckDuckGo')) return 'DuckDuckGo';
       if (ua.includes('Firefox')) return 'Firefox';
+      if (ua.includes('Edg')) return 'Edge';
       if (ua.includes('Chrome')) return 'Chrome';
       if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
-      if (ua.includes('Edge')) return 'Edge';
       return 'Unknown';
     }
 
@@ -748,16 +745,15 @@
       if (ua.includes('Mac')) return 'MacOS';
       if (ua.includes('Linux')) return 'Linux';
       if (ua.includes('Android')) return 'Android';
-      if (ua.includes('iOS')) return 'iOS';
+      if (ua.includes('iOS') || ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
       return 'Unknown';
     }
 
-    /**
-     * Get journey analytics
-     */
     getAnalytics() {
       return {
-        sessionId: this.journey.sessionId,
+        visitorId: this.visitorId,
+        sessionId: this.sessionId,
+        anonymousName: this.anonymousName,
         sessionDuration: Date.now() - this.journey.startedAt,
         pageCount: this.journey.pages.length,
         eventCount: this.journey.events.length,
@@ -774,13 +770,12 @@
         utmCampaign: this.journey.utm?.campaign || '',
         device: this.journey.device,
         deviceType: this.getDeviceType(),
+        browser: this.getBrowserInfo(),
         avgTimePerPage: this.getAverageTimePerPage(),
         avgScrollDepth: this.getAverageScrollDepth(),
         referrer: this.journey.referrer,
-        // Include geolocation data for globe visualization
         country: this.geolocationData?.country || '',
         countryCode: this.geolocationData?.countryCode || 'unknown',
-        visitorId: this.journey.sessionId,
         startTime: this.journey.startedAt
       };
     }
@@ -793,9 +788,6 @@
       return Math.round(total / pagesWithTime.length);
     }
 
-    /**
-     * Export journey data
-     */
     exportJourney() {
       return {
         journey: this.journey,
@@ -803,24 +795,20 @@
       };
     }
 
-    /**
-     * Clear journey (no cookies to clear!)
-     */
     clearJourney() {
       sessionStorage.removeItem(this.config.storagePrefix + 'session');
-      sessionStorage.removeItem(this.config.storagePrefix + 'sid');
       this.journey = this.createNewJourney();
-      this.log('🧹 Journey cleared (no cookies were harmed)', 'success');
+      this.log('🧹 Journey cleared', 'success');
     }
 
-    /**
-     * Get storage usage info
-     */
     getStorageInfo() {
-      const sessionKeys = Object.keys(sessionStorage).filter(k => k.startsWith(this.config.storagePrefix));
-      const localKeys = Object.keys(localStorage).filter(k => k.startsWith(this.config.storagePrefix));
+      const sessionKeys = Object.keys(sessionStorage).filter(k => k.startsWith(this.config.storagePrefix) || k.startsWith(STORAGE_PREFIX));
+      const localKeys = Object.keys(localStorage).filter(k => k.startsWith(this.config.storagePrefix) || k.startsWith(STORAGE_PREFIX));
       
       return {
+        visitorId: this.visitorId,
+        sessionId: this.sessionId,
+        anonymousName: this.anonymousName,
         sessionStorage: {
           keys: sessionKeys,
           size: sessionKeys.reduce((sum, k) => sum + (sessionStorage.getItem(k) || '').length, 0)
@@ -829,23 +817,29 @@
           keys: localKeys,
           size: localKeys.reduce((sum, k) => sum + (localStorage.getItem(k) || '').length, 0)
         },
-        cookiesUsed: 0, // Always 0!
+        cookiesUsed: 0,
         privacyFriendly: true
       };
     }
   }
 
-  // Expose globally (both names for compatibility)
+  // Expose globally
   window.CookieFreeJourneyTracker = CookieFreeJourneyTracker;
-  window.JourneyTracker = CookieFreeJourneyTracker; // Alias for shorter name
+  window.JourneyTracker = CookieFreeJourneyTracker;
+  
+  // Also expose identity helpers for other scripts
+  window.TrackFlowIdentity = {
+    getVisitorId: getOrCreateVisitorId,
+    getSessionId: getOrCreateSessionId,
+    generateAnonymousName
+  };
   
   // Auto-initialize if not disabled
   if (!window.DISABLE_AUTO_JOURNEY_TRACKING) {
     window.journeyTracker = new CookieFreeJourneyTracker({
       debug: false,
-      apiEndpoint: window.TRACKFLOW_API_ENDPOINT || 'https://trackflow-app-production.up.railway.app/api' // Set default endpoint
+      apiEndpoint: window.TRACKFLOW_API_ENDPOINT || 'https://trackflow-app-production.up.railway.app/api'
     });
   }
   
 })();
-

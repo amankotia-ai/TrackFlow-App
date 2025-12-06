@@ -4,6 +4,8 @@
  * 
  * This script tracks user interactions with specific elements on a webpage
  * and sends the data to our analytics system for workflow triggers.
+ * 
+ * Uses unified VisitorIdentity for consistent visitor/session tracking.
  */
 
 (function() {
@@ -30,14 +32,92 @@
       this.observers = new Map();
       this.throttledEvents = new Map();
       this.processingTimer = null;
-      this.sessionId = this.generateSessionId();
+      
+      // Use unified identity system
+      this.initializeIdentity();
+      
       this.pageContext = this.getPageContext();
       this.userContext = this.getUserContext();
       
+      console.log('🎯 Element Tracker: Visitor ID:', this.visitorId);
       console.log('🎯 Element Tracker: Session ID:', this.sessionId);
       console.log('🎯 Element Tracker: Page Context:', this.pageContext);
       
       this.init();
+    }
+
+    /**
+     * Initialize visitor and session identity using unified system
+     */
+    initializeIdentity() {
+      // Check if VisitorIdentity is available
+      if (typeof window !== 'undefined' && window.VisitorIdentity) {
+        const identity = window.VisitorIdentity.getIdentity();
+        this.visitorId = identity.visitorId;
+        this.sessionId = identity.sessionId;
+        console.log('🎯 Element Tracker: Using unified VisitorIdentity');
+      } else {
+        // Fallback to localStorage/sessionStorage directly
+        this.visitorId = this.getOrCreateVisitorId();
+        this.sessionId = this.getOrCreateSessionId();
+        console.log('🎯 Element Tracker: Using fallback identity');
+      }
+    }
+
+    /**
+     * Fallback: Get or create persistent visitor ID
+     */
+    getOrCreateVisitorId() {
+      const key = 'tf_visitor_id';
+      try {
+        let visitorId = localStorage.getItem(key);
+        if (!visitorId) {
+          visitorId = 'v_' + Date.now().toString(36) + '_' + this.generateRandomId(12);
+          localStorage.setItem(key, visitorId);
+        }
+        return visitorId;
+      } catch (e) {
+        return 'temp_' + this.generateRandomId(16);
+      }
+    }
+
+    /**
+     * Fallback: Get or create session ID
+     */
+    getOrCreateSessionId() {
+      const key = 'tf_session_id';
+      const activityKey = 'tf_last_activity';
+      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+      
+      try {
+        let sessionId = sessionStorage.getItem(key);
+        const lastActivity = sessionStorage.getItem(activityKey);
+        
+        const isValid = sessionId && lastActivity && 
+          (Date.now() - parseInt(lastActivity, 10)) < SESSION_TIMEOUT;
+        
+        if (!isValid) {
+          sessionId = 's_' + Date.now().toString(36) + '_' + this.generateRandomId(8);
+          sessionStorage.setItem(key, sessionId);
+        }
+        
+        sessionStorage.setItem(activityKey, Date.now().toString());
+        return sessionId;
+      } catch (e) {
+        return 'temp_s_' + this.generateRandomId(12);
+      }
+    }
+
+    /**
+     * Generate random ID string
+     */
+    generateRandomId(length = 16) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return result;
     }
 
     init() {
@@ -53,10 +133,6 @@
       });
 
       console.log('🎯 Element Tracker: Initialization complete');
-    }
-
-    generateSessionId() {
-      return 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
 
     getPageContext() {
@@ -96,6 +172,7 @@
       const pageViewEvent = {
         eventType: 'page_view',
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         pageContext: this.pageContext,
         userContext: this.userContext
@@ -209,6 +286,11 @@
       return (event) => {
         const elementId = this.getElementId(element, selector);
         
+        // Update activity timestamp
+        if (window.VisitorIdentity) {
+          window.VisitorIdentity.updateActivity();
+        }
+        
         const trackedEvent = {
           eventType: eventType,
           elementId: elementId,
@@ -217,6 +299,7 @@
           elementText: element.textContent?.trim() || '',
           elementAttributes: this.getElementAttributes(element),
           timestamp: Date.now(),
+          visitorId: this.visitorId,
           sessionId: this.sessionId,
           eventData: this.extractEventData(event, element, eventType),
           pageContext: this.pageContext,
@@ -245,6 +328,7 @@
         elementSelector: this.getElementSelector(form),
         elementTag: 'form',
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         eventData: {
           formFields: formFields,
@@ -267,6 +351,7 @@
         elementSelector: this.getElementSelector(field),
         elementTag: field.tagName.toLowerCase(),
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         eventData: {
           fieldName: field.name,
@@ -305,6 +390,7 @@
         elementTag: element.tagName.toLowerCase(),
         elementText: element.textContent?.trim() || '',
         timestamp: Date.now(),
+        visitorId: this.visitorId,
         sessionId: this.sessionId,
         eventData: {
           visibilityPercentage: Math.round(intersectionRatio * 100),
@@ -448,6 +534,7 @@
           body: JSON.stringify({
             events: batch,
             metadata: {
+              visitorId: this.visitorId,
               sessionId: this.sessionId,
               timestamp: Date.now(),
               userAgent: navigator.userAgent
@@ -539,4 +626,4 @@
     }, 1000);
   }
 
-})(); 
+})();

@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createClickHouseClient } from '@clickhouse/client';
 import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,13 +18,81 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cC
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Initialize ClickHouse client
+const clickhouse = createClickHouseClient({
+  url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  username: process.env.CLICKHOUSE_USER || 'default',
+  password: process.env.CLICKHOUSE_PASSWORD || '',
+  database: process.env.CLICKHOUSE_DATABASE || 'default',
+  clickhouse_settings: {
+    async_insert: 1,
+    wait_for_async_insert: 0,
+  },
+});
+
 console.log('🔗 Supabase client initialized:', {
   url: supabaseUrl ? '✅ Set' : '❌ Missing',
   key: supabaseKey ? '✅ Set' : '❌ Missing'
 });
+console.log('📊 ClickHouse client initialized');
+
+// IP Geolocation cache (in-memory, resets on server restart)
+const ipCountryCache = new Map();
+const IP_CACHE_TTL = 1000 * 60 * 60; // 1 hour cache
+
+// Get country code from IP address using free API
+async function getCountryFromIP(ip) {
+  // Skip local/private IPs
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+    return 'US'; // Default to US for local development
+  }
+
+  // Check cache first
+  const cached = ipCountryCache.get(ip);
+  if (cached && cached.timestamp > Date.now() - IP_CACHE_TTL) {
+    return cached.countryCode;
+  }
+
+  try {
+    // Use ip-api.com (free, no API key required, 45 requests/minute limit)
+    const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,countryCode`, {
+      timeout: 2000 // 2 second timeout
+    });
+    
+    if (response.data && response.data.status === 'success' && response.data.countryCode) {
+      const countryCode = response.data.countryCode;
+      ipCountryCache.set(ip, { countryCode, timestamp: Date.now() });
+      console.log(`🌍 IP ${ip} → ${countryCode}`);
+      return countryCode;
+    }
+  } catch (error) {
+    console.log(`⚠️ IP lookup failed for ${ip}:`, error.message);
+  }
+
+  // Default to 'US' if lookup fails
+  return 'US';
+}
+
+// Get client IP from request (handles proxies)
+function getClientIP(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  if (req.headers['cf-connecting-ip']) {
+    return req.headers['cf-connecting-ip'];
+  }
+  if (req.headers['true-client-ip']) {
+    return req.headers['true-client-ip'];
+  }
+  return req.ip || req.connection?.remoteAddress || '';
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Trust proxy for correct IP detection
+app.set('trust proxy', true);
 
 // Enhanced CORS for external domains (including Webflow)
 app.use(cors({
@@ -579,6 +648,33 @@ app.post('/api/analytics/track', async (req, res) => {
             console.warn('⚠️ Legacy analytics save warning:', legacyError);
           }
 
+          // Also insert to ClickHouse for real-time analytics
+          try {
+            const clientIP = getClientIP(req);
+            const countryCode = await getCountryFromIP(clientIP);
+            
+            await clickhouse.insert({
+              table: 'analytics_events',
+              values: [{
+                event_type: eventType,
+                page_url: pageUrl || '',
+                element_selector: event.elementSelector || '',
+                timestamp: new Date().toISOString(),
+                session_id: sessionId || '',
+                user_id: null,
+                workflow_id: event.workflowId || null,
+                metadata: JSON.stringify(event.eventData || {}),
+                device_type: deviceType || 'desktop',
+                browser_info: JSON.stringify({ userAgent }),
+                country_code: countryCode
+              }],
+              format: 'JSONEachRow',
+            });
+            console.log(`✅ Event inserted to ClickHouse (country: ${countryCode})`);
+          } catch (chError) {
+            console.warn('⚠️ ClickHouse insert failed (continuing):', chError.message);
+          }
+
         } catch (eventError) {
           console.error('❌ Error processing individual event:', eventError, event);
         }
@@ -1069,6 +1165,75 @@ app.get('/tracking-script.js', (req, res) => {
   }
 });
 
+// Real-time Live Users Widget - queries ClickHouse for live data
+app.get('/api/analytics/live', async (req, res) => {
+  try {
+    const resultSet = await clickhouse.query({
+      query: `
+        SELECT uniq(session_id) as live_users 
+        FROM analytics_events 
+        WHERE timestamp >= now() - INTERVAL 5 MINUTE
+      `,
+      format: 'JSONEachRow'
+    });
+    
+    const data = await resultSet.json();
+    res.json({
+      success: true,
+      liveUsers: parseInt(data[0]?.live_users || 0),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Live users error:', error);
+    // Return 0 if ClickHouse is unavailable
+    res.json({ 
+      success: true, 
+      liveUsers: 0,
+      timestamp: new Date().toISOString(),
+      note: 'ClickHouse unavailable'
+    });
+  }
+});
+
+// Real-time Live Users with Location Data for Map Visualization - queries ClickHouse
+app.get('/api/analytics/live-locations', async (req, res) => {
+  try {
+    const resultSet = await clickhouse.query({
+      query: `
+        SELECT 
+          country_code,
+          uniq(session_id) as user_count
+        FROM analytics_events
+        WHERE timestamp >= now() - INTERVAL 5 MINUTE
+          AND country_code != ''
+          AND country_code != 'unknown'
+        GROUP BY country_code
+        ORDER BY user_count DESC
+        LIMIT 100
+      `,
+      format: 'JSONEachRow'
+    });
+    
+    const data = await resultSet.json();
+    console.log(`🌍 Live locations: ${data.length} countries`);
+    
+    res.json({
+      success: true,
+      locations: data,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Live locations error:', error);
+    // Return empty array if ClickHouse is unavailable
+    res.json({ 
+      success: true, 
+      locations: [],
+      timestamp: new Date().toISOString(),
+      note: 'ClickHouse unavailable'
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -1076,6 +1241,8 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date(),
     endpoints: {
       analytics: '/api/analytics/track',
+      analytics_live: '/api/analytics/live',
+      analytics_locations: '/api/analytics/live-locations',
       triggers: '/api/workflows/trigger-check', 
       tracking_script: '/tracking-script.js',
       scraping: '/api/scrape',
