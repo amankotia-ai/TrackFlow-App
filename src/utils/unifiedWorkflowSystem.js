@@ -2941,6 +2941,9 @@
 
         // 2. Send to ClickHouse (Real-time Analytics) via Railway API
         // Format payload for ClickHouse endpoint
+        // Include country code from geolocation data for globe visualization
+        const countryCode = this.geolocationData?.countryCode || 'unknown';
+        
         const clickHousePayload = {
           events: [{
             eventType: 'workflow_execution',
@@ -2949,11 +2952,14 @@
             sessionId: this.generateSessionId(),
             pageUrl: executionData.pageUrl || window.location.href,
             deviceType: executionData.deviceType,
+            countryCode: countryCode,
             eventData: {
               status: executionData.status,
               executionTimeMs: executionData.executionTimeMs,
               actionsCount: (executionData.actionsExecuted || []).length,
-              error: executionData.errorMessage
+              error: executionData.errorMessage,
+              country: this.geolocationData?.country || '',
+              countryCode: countryCode
             },
             browserInfo: {
               userAgent: navigator.userAgent
@@ -2972,10 +2978,12 @@
                     pageUrl: executionData.pageUrl || window.location.href,
                     elementSelector: action.selector,
                     deviceType: executionData.deviceType,
+                    countryCode: countryCode,
                     eventData: {
                         actionName: action.name,
                         config: action.config,
-                        executionTimeMs: action.executionTimeMs
+                        executionTimeMs: action.executionTimeMs,
+                        countryCode: countryCode
                     }
                 });
             });
