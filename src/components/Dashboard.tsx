@@ -21,7 +21,7 @@ import { WorkflowService } from '../services/workflowService';
 import { workflowTemplates } from '../data/workflowTemplates';
 import TemplatePreviewModal from './TemplatePreviewModal';
 import RealTimeUsers from './RealTimeUsers';
-import GlobeVisualization from './GlobeVisualization';
+import WorldMapVisualization from './WorldMapVisualization';
 
 interface DashboardProps {
   workflows?: Workflow[];
@@ -149,65 +149,61 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="flex-1 bg-white">
-      <div className="max-w-[1600px] mx-auto px-6 py-6">
+    <div className="flex-1 bg-white h-full overflow-hidden">
+      <div className="max-w-[1600px] mx-auto px-6 py-4 h-full flex flex-col">
         
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-px bg-zinc-200 border border-zinc-200 rounded-md overflow-hidden mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-px bg-zinc-200 border border-zinc-200 rounded-md overflow-hidden mb-8 shrink-0">
           {/* Real-Time Users Widget */}
           <RealTimeUsers />
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="bg-white p-4 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
               <BarChart3 className="size-4 text-zinc-400" />
               <span className="text-xs text-zinc-500 uppercase tracking-wider">Total Playbooks</span>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.totalPlaybooks}</div>
-            <div className="text-xs text-zinc-500">All workflows</div>
+            <div className="text-2xl font-light">{stats.totalPlaybooks}</div>
           </div>
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="bg-white p-4 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
               <Zap className="size-4 text-zinc-400" />
               <span className="text-xs text-zinc-500 uppercase tracking-wider">Active</span>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.activePlaybooks}</div>
-            <div className="text-xs text-zinc-500">Running now</div>
+            <div className="text-2xl font-light">{stats.activePlaybooks}</div>
           </div>
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="bg-white p-4 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
               <Activity className="size-4 text-zinc-400" />
               <span className="text-xs text-zinc-500 uppercase tracking-wider">Executions</span>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.totalExecutions.toLocaleString()}</div>
-            <div className="text-xs text-zinc-500">Total runs</div>
+            <div className="text-2xl font-light">{stats.totalExecutions.toLocaleString()}</div>
           </div>
 
-          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="bg-white p-4 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
               <Clock className="size-4 text-zinc-400" />
               <span className="text-xs text-zinc-500 uppercase tracking-wider">Success Rate</span>
             </div>
-            <div className="text-3xl font-light mb-1">{stats.successRate}%</div>
-            <div className="text-xs text-zinc-500">Estimated</div>
+            <div className="text-2xl font-light">{stats.successRate}%</div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Globe Visualization (Replacing Recent Playbooks) */}
-          <div className="lg:col-span-2">
-            <GlobeVisualization />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch flex-1 min-h-0">
+          {/* World Map Visualization */}
+          <div className="lg:col-span-2 flex flex-col">
+            <WorldMapVisualization />
           </div>
 
           {/* Featured Templates */}
-          <div>
-            <div className="mb-4">
+          <div className="flex flex-col min-h-0">
+            <div className="mb-3 shrink-0">
               <h2 className="text-sm font-medium text-zinc-900">Quick Start</h2>
-              <p className="text-xs text-zinc-500 mt-1">Start with a popular template</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Start with a popular template</p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2 flex-1 flex flex-col min-h-0 overflow-hidden">
               {featuredTemplates.map((template) => {
                 const triggerNode = template.nodes.find(n => n.type === 'trigger');
                 const IconComponent = triggerNode?.icon 
@@ -217,21 +213,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                 return (
                   <div 
                     key={template.id} 
-                    className="group border border-zinc-200 rounded-md bg-white p-4 hover:border-zinc-300 transition-all hover:shadow-sm"
+                    className="group flex-1 border border-zinc-200 rounded-md bg-white p-3 hover:border-zinc-300 transition-all hover:shadow-sm flex flex-col min-h-0"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {IconComponent && <IconComponent className="size-4 text-zinc-500" />}
-                        <div className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                          {template.templateMeta?.categoryLabel || 'Template'}
-                        </div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {IconComponent && <IconComponent className="size-3.5 text-zinc-500" />}
+                      <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                        {template.templateMeta?.categoryLabel || 'Template'}
                       </div>
                     </div>
                     
-                    <h3 className="text-sm font-medium text-zinc-900 mb-1">{template.name}</h3>
-                    <p className="text-xs text-zinc-500 mb-4 line-clamp-2">{template.description}</p>
+                    <h3 className="text-sm font-medium text-zinc-900 mb-0.5">{template.name}</h3>
+                    <p className="text-xs text-zinc-500 mb-2 line-clamp-1 flex-1">{template.description}</p>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 mt-auto shrink-0">
                       <button 
                         onClick={() => handleTemplatePreview(template)}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition-colors text-xs font-medium rounded-md"

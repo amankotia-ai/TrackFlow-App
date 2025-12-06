@@ -36,25 +36,23 @@ const RealTimeUsers: React.FC<RealTimeUsersProps> = ({ className }) => {
 
   if (error) {
     return (
-      <div className={`bg-white p-6 hover:bg-zinc-50 transition-colors ${className}`}>
-        <div className="flex items-center gap-2 mb-3">
+      <div className={`bg-white p-4 hover:bg-zinc-50 transition-colors ${className}`}>
+        <div className="flex items-center gap-2 mb-2">
           <Zap className="size-4 text-zinc-300" />
           <span className="text-xs text-zinc-500 uppercase tracking-wider">Real-Time Users</span>
         </div>
-        <div className="text-3xl font-light mb-1 text-zinc-400">-</div>
-        <div className="text-xs text-zinc-500">Unavailable</div>
+        <div className="text-2xl font-light text-zinc-400">-</div>
       </div>
     );
   }
 
   return (
-    <div className={`bg-white p-6 hover:bg-zinc-50 transition-colors ${className}`}>
-      <div className="flex items-center gap-2 mb-3">
+    <div className={`bg-white p-4 hover:bg-zinc-50 transition-colors ${className}`}>
+      <div className="flex items-center gap-2 mb-2">
         <Zap className="size-4 text-amber-500 fill-amber-500 animate-pulse" />
-        <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider">Real-Time Users</span>
+        <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider">Real-Time</span>
       </div>
-      <div className="text-3xl font-light mb-1">{liveCount}</div>
-      <div className="text-xs text-zinc-500">Active in last 5 mins</div>
+      <div className="text-2xl font-light">{liveCount}</div>
     </div>
   );
 };
