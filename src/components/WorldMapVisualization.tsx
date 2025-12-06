@@ -8,6 +8,7 @@ import {
 } from 'react-simple-maps';
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import CountryVisitorsModal from './CountryVisitorsModal';
+import { supabase } from '../lib/supabase';
 
 // World topology URL (Natural Earth 110m)
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -71,13 +72,25 @@ const WorldMapVisualization: React.FC = () => {
   const [position, setPosition] = useState({ coordinates: [0, 20] as [number, number], zoom: 1 });
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
-  // Fetch live user data
+  // Fetch live user data (filtered by user's websites)
   useEffect(() => {
     const fetchLiveData = async () => {
       try {
+        // Get the current session to include auth token
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Include auth token if available
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        
         const [liveResponse, locationsResponse] = await Promise.all([
-          fetch('/api/analytics/live'),
-          fetch('/api/analytics/live-locations')
+          fetch('/api/analytics/live', { headers }),
+          fetch('/api/analytics/live-locations', { headers })
         ]);
         
         if (liveResponse.ok) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Users, Clock, Monitor, Smartphone, Tablet, ChevronRight } from 'lucide-react';
 import VisitorDetailModal from './VisitorDetailModal';
+import { supabase } from '../lib/supabase';
 
 // Country code to name and flag mapping
 const COUNTRY_INFO: Record<string, { name: string; flag: string }> = {
@@ -120,7 +121,19 @@ const CountryVisitorsModal: React.FC<CountryVisitorsModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch(`/api/visitors/by-country/${encodeURIComponent(countryCode)}`);
+      // Get the current session to include auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Include auth token if available
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      
+      const response = await fetch(`/api/visitors/by-country/${encodeURIComponent(countryCode)}`, { headers });
       
       if (!response.ok) {
         throw new Error('Failed to fetch visitors');

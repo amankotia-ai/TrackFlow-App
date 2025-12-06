@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { supabase } from '../lib/supabase';
 
 interface RealTimeUsersProps {
   className?: string;
@@ -9,14 +10,28 @@ interface RealTimeUsersProps {
 const RealTimeUsers: React.FC<RealTimeUsersProps> = ({ className }) => {
   const [liveCount, setLiveCount] = useState<number>(0);
   const [error, setError] = useState<boolean>(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLiveCount = async () => {
       try {
-        const response = await fetch('/api/analytics/live');
+        // Get the current session to include auth token
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Include auth token if available
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        
+        const response = await fetch('/api/analytics/live', { headers });
         if (response.ok) {
           const data = await response.json();
           setLiveCount(data.liveUsers);
+          setMessage(data.message || null);
           setError(false);
         }
       } catch (err) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, ExternalLink } from 'lucide-react';
 import VisitorProfile from './VisitorProfile';
 import VisitorJourney from './VisitorJourney';
+import { supabase } from '../lib/supabase';
 
 interface Visitor {
   visitor_id: string;
@@ -74,7 +75,19 @@ const VisitorDetailModal: React.FC<VisitorDetailModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch(`/api/visitors/${encodeURIComponent(visitorId)}`);
+      // Get the current session to include auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Include auth token if available
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      
+      const response = await fetch(`/api/visitors/${encodeURIComponent(visitorId)}`, { headers });
       
       if (!response.ok) {
         throw new Error('Failed to fetch visitor data');

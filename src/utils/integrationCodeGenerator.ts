@@ -94,10 +94,17 @@ export function generateIntegrationCode(
 
 /**
  * Generate the simple head code for unified system
+ * 
+ * IMPORTANT: Script loading order:
+ * 1. trackflow-core.js - Establishes unified visitor identity (MUST BE FIRST)
+ * 2. anti-flicker.js - Prevents flash of original content
+ * 3. journey-tracker.js - Tracks user journey (uses TrackFlowCore for identity/dedup)
+ * 4. unified-workflow-system.js - Runs workflows (uses TrackFlowCore for identity)
  */
 function generateUnifiedHeadCode(config: TrackingConfig): string {
   const baseUrl = config.trackingScriptUrl?.replace('/api/unified-workflow-system.js', '') || 'https://trackflow-app-production.up.railway.app';
   const scriptUrl = config.trackingScriptUrl || `${baseUrl}/api/unified-workflow-system.js`;
+  const trackflowCoreUrl = `${baseUrl}/trackflow-core.js`;
   const antiFlickerUrl = `${baseUrl}/api/anti-flicker.js`;
   const journeyTrackerUrl = `${baseUrl}/journey-tracker.js`;
   
@@ -117,7 +124,9 @@ function generateUnifiedHeadCode(config: TrackingConfig): string {
 <script>
   ${antiFlickerConfig}
 </script>
-<!-- Anti-flicker script (loads first to prevent FOOC) -->
+<!-- TrackFlow Core - Unified identity & deduplication (MUST LOAD FIRST) -->
+<script src="${trackflowCoreUrl}"></script>
+<!-- Anti-flicker script (prevents FOOC) -->
 <script src="${antiFlickerUrl}"></script>
 <!-- Journey tracker for visitor analytics -->
 <script src="${journeyTrackerUrl}"></script>
@@ -137,7 +146,9 @@ function generateUnifiedHeadCode(config: TrackingConfig): string {
 <script>
   ${antiFlickerConfig}
 </script>
-<!-- Anti-flicker script (loads first to prevent FOOC) -->
+<!-- TrackFlow Core - Unified identity & deduplication (MUST LOAD FIRST) -->
+<script src="${trackflowCoreUrl}"></script>
+<!-- Anti-flicker script (prevents FOOC) -->
 <script src="${antiFlickerUrl}"></script>
 <!-- Journey tracker for visitor analytics -->
 <script src="${journeyTrackerUrl}"></script>

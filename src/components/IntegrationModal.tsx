@@ -14,6 +14,7 @@ const IntegrationModal: React.FC<IntegrationModalProps> = ({ workflow, isOpen, o
   if (!isOpen) return null;
 
   // Minimal, single-snippet integration code with API key one-liner
+  // IMPORTANT: Script loading order matters for deduplication to work correctly
   const headSnippet = `<!-- TrackFlow - Add to <head> section -->
 <script>
   // Configure anti-flicker and tracking settings
@@ -26,7 +27,9 @@ const IntegrationModal: React.FC<IntegrationModalProps> = ({ workflow, isOpen, o
   // Set API endpoint for visitor tracking
   window.TRACKFLOW_API_ENDPOINT = 'https://trackflow-app-production.up.railway.app/api';
 </script>
-<!-- Anti-flicker script (loads first to prevent FOOC) -->
+<!-- TrackFlow Core - Unified identity & deduplication (MUST LOAD FIRST) -->
+<script src="https://trackflow-app-production.up.railway.app/trackflow-core.js"></script>
+<!-- Anti-flicker script (prevents FOOC) -->
 <script src="https://trackflow-app-production.up.railway.app/api/anti-flicker.js"></script>
 <!-- Journey tracker for visitor analytics -->
 <script src="https://trackflow-app-production.up.railway.app/journey-tracker.js"></script>

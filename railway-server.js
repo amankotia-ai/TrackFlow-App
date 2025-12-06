@@ -68,6 +68,59 @@ console.log('🔑 Supabase Service Role Key:', process.env.SUPABASE_SERVICE_ROLE
 const ipCountryCache = new Map();
 const IP_CACHE_TTL = 1000 * 60 * 60; // 1 hour cache
 
+// Event deduplication cache (prevents duplicate page_view events)
+const eventDedupCache = new Map();
+const EVENT_DEDUP_TTL = 1000 * 60 * 5; // 5 minute cache (same page view within 5 min = duplicate)
+const MAX_DEDUP_CACHE_SIZE = 10000; // Prevent memory bloat
+
+/**
+ * Generate a deduplication hash for an event
+ * Rounds timestamp to nearest minute to catch near-simultaneous requests
+ */
+function generateEventDedupHash(event) {
+  const visitorId = event.visitorId || '';
+  const sessionId = event.sessionId || '';
+  const eventType = event.eventType || '';
+  const pageUrl = event.pageUrl || event.pageContext?.url || '';
+  // Round to nearest minute for dedup
+  const timeKey = Math.floor(Date.now() / (1000 * 60));
+  return `${visitorId}:${sessionId}:${eventType}:${pageUrl}:${timeKey}`;
+}
+
+/**
+ * Check if an event is a duplicate (and mark it if not)
+ * Returns true if duplicate, false if new
+ */
+function isDuplicateEvent(event) {
+  // Only dedup page_view events
+  if (event.eventType !== 'page_view') {
+    return false;
+  }
+
+  const hash = generateEventDedupHash(event);
+  const now = Date.now();
+  
+  // Clean old entries if cache is getting too large
+  if (eventDedupCache.size > MAX_DEDUP_CACHE_SIZE) {
+    const cutoff = now - EVENT_DEDUP_TTL;
+    for (const [key, timestamp] of eventDedupCache) {
+      if (timestamp < cutoff) {
+        eventDedupCache.delete(key);
+      }
+    }
+  }
+
+  // Check if we've seen this event recently
+  const lastSeen = eventDedupCache.get(hash);
+  if (lastSeen && (now - lastSeen) < EVENT_DEDUP_TTL) {
+    return true; // Duplicate
+  }
+
+  // Mark as seen
+  eventDedupCache.set(hash, now);
+  return false; // New event
+}
+
 // Generate anonymous name from visitor ID (deterministic)
 function generateAnonymousName(visitorId) {
   const adjectives = ['Swift', 'Happy', 'Clever', 'Brave', 'Quiet', 'Bold', 'Eager', 'Wise', 'Gentle', 'Rapid', 'Calm', 'Bright'];
@@ -402,6 +455,42 @@ app.get('/api/anti-flicker.js', (req, res) => {
   }
 });
 
+// Serve TrackFlow Core script (unified identity & deduplication - MUST LOAD FIRST)
+app.get('/trackflow-core.js', (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const trackflowCoreScript = fs.readFileSync(path.join(__dirname, 'public/trackflow-core.js'), 'utf8');
+    console.log('🎯 Serving TrackFlow Core script to:', req.get('origin') || req.ip);
+    res.send(trackflowCoreScript);
+  } catch (error) {
+    console.error('❌ TrackFlow Core script not found:', error.message);
+    res.status(404).send('// TrackFlow Core script not found');
+  }
+});
+
+// Also serve TrackFlow Core from /api/ path for consistency
+app.get('/api/trackflow-core.js', (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const trackflowCoreScript = fs.readFileSync(path.join(__dirname, 'public/trackflow-core.js'), 'utf8');
+    console.log('🎯 Serving TrackFlow Core script (API path) to:', req.get('origin') || req.ip);
+    res.send(trackflowCoreScript);
+  } catch (error) {
+    console.error('❌ TrackFlow Core script not found:', error.message);
+    res.status(404).send('// TrackFlow Core script not found');
+  }
+});
+
 // Serve journey tracker script (cookie-free analytics)
 app.get('/journey-tracker.js', (req, res) => {
   try {
@@ -468,11 +557,32 @@ app.post('/api/analytics/track', async (req, res) => {
       const clientIP = getClientIP(req);
       const serverCountryCode = await getCountryFromIP(clientIP);
       
-      // Async insert to ClickHouse analytics_events
+      // Filter out duplicate events (server-side deduplication)
+      const originalCount = events.length;
+      const dedupedEvents = events.filter(event => !isDuplicateEvent(event));
+      const duplicateCount = originalCount - dedupedEvents.length;
+      
+      if (duplicateCount > 0) {
+        console.log(`⏭️ Filtered ${duplicateCount} duplicate page_view events (server-side dedup)`);
+      }
+      
+      // Skip if all events were duplicates
+      if (dedupedEvents.length === 0) {
+        console.log('⏭️ All events were duplicates, skipping');
+        return res.json({ 
+          success: true, 
+          received: originalCount,
+          processed: 0,
+          duplicatesFiltered: duplicateCount,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Async insert to ClickHouse analytics_events (using deduped events)
       try {
         await clickhouse.insert({
           table: 'analytics_events',
-          values: events.map(event => ({
+          values: dedupedEvents.map(event => ({
             event_type: event.eventType,
             page_url: event.pageContext?.url || event.pageUrl || '',
             element_selector: event.elementSelector || '',
@@ -488,13 +598,13 @@ app.post('/api/analytics/track', async (req, res) => {
           })),
           format: 'JSONEachRow',
         });
-        console.log(`✅ Events flushed to ClickHouse (visitor: ${bodyVisitorId || events[0]?.visitorId}, country: ${serverCountryCode})`);
+        console.log(`✅ Events flushed to ClickHouse (visitor: ${bodyVisitorId || dedupedEvents[0]?.visitorId}, country: ${serverCountryCode}, deduped: ${dedupedEvents.length}/${originalCount})`);
       } catch (chError) {
         console.error('⚠️ ClickHouse insert failed (continuing):', chError.message);
       }
 
-      // Also insert page_view events to page_views table for visitor tracking
-      const pageViewEvents = events.filter(e => e.eventType === 'page_view');
+      // Also insert page_view events to page_views table for visitor tracking (using deduped events)
+      const pageViewEvents = dedupedEvents.filter(e => e.eventType === 'page_view');
       if (pageViewEvents.length > 0) {
         try {
           await clickhouse.insert({
@@ -521,8 +631,8 @@ app.post('/api/analytics/track', async (req, res) => {
         }
       }
 
-      // Update or create visitor record
-      const firstEvent = events[0];
+      // Update or create visitor record (using deduped events)
+      const firstEvent = dedupedEvents[0];
       const visitorId = firstEvent?.visitorId || bodyVisitorId;
       if (visitorId) {
         try {
@@ -536,8 +646,8 @@ app.post('/api/analytics/track', async (req, res) => {
               first_seen: now,
               last_seen: now,
               total_sessions: 1,
-              total_page_views: 1,
-              total_events: events.length,
+              total_page_views: pageViewEvents.length,
+              total_events: dedupedEvents.length,
               country_code: serverCountryCode || firstEvent?.countryCode || 'US',
               primary_device: firstEvent?.deviceType || 'desktop',
               primary_browser: firstEvent?.browserInfo?.browser || ''
@@ -550,7 +660,7 @@ app.post('/api/analytics/track', async (req, res) => {
         }
       }
 
-      events.forEach(event => {
+      dedupedEvents.forEach(event => {
         console.log('📊 Event:', event.eventType, serverCountryCode, event.pageContext?.pathname || event.pageUrl);
       });
     }
@@ -558,6 +668,7 @@ app.post('/api/analytics/track', async (req, res) => {
     res.json({ 
       success: true, 
       received: events?.length || 0,
+      processed: events ? events.length - (events.length - (events?.length || 0)) : 0,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1217,10 +1328,70 @@ app.get('/api/journey-analytics/high-intent', async (req, res) => {
 
 // --- Visitor API Endpoints ---
 
-// Get all visitors (paginated)
+// Get all visitors (paginated, filtered by user's websites)
 app.get('/api/visitors', async (req, res) => {
   try {
     const { limit = 50, offset = 0, country } = req.query;
+    
+    // Verify user authentication
+    const user = await verifyUserToken(req);
+    
+    if (!user) {
+      return res.json({
+        success: true,
+        visitors: [],
+        total: 0,
+        message: 'Authentication required to view visitor data',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Get user's website domains
+    const userDomains = await getUserWebsiteDomains(user.id);
+    
+    if (userDomains.length === 0) {
+      return res.json({
+        success: true,
+        visitors: [],
+        total: 0,
+        message: 'No websites configured. Create a workflow to start tracking.',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Build domain filter
+    const domainPatterns = userDomains.map(d => `%${d}%`);
+    
+    // First, get visitor IDs that have visited user's websites
+    const visitorIdsQuery = `
+      SELECT DISTINCT visitor_id
+      FROM analytics_events
+      WHERE visitor_id != ''
+        ${country ? 'AND country_code = {country:String}' : ''}
+        AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
+      LIMIT 10000
+    `;
+    
+    const visitorIdsResult = await clickhouse.query({
+      query: visitorIdsQuery,
+      query_params: { 
+        country: country || '',
+        ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+      },
+      format: 'JSONEachRow'
+    });
+    
+    const allowedVisitorIds = (await visitorIdsResult.json()).map(v => v.visitor_id);
+    
+    if (allowedVisitorIds.length === 0) {
+      return res.json({
+        success: true,
+        visitors: [],
+        total: 0,
+        message: 'No visitors found for your websites',
+        timestamp: new Date().toISOString()
+      });
+    }
     
     let query = `
       SELECT 
@@ -1234,7 +1405,8 @@ app.get('/api/visitors', async (req, res) => {
         primary_device,
         primary_browser
       FROM visitors
-      ${country ? 'WHERE country_code = {country:String}' : ''}
+      WHERE visitor_id IN ({allowedIds:Array(String)})
+        ${country ? 'AND country_code = {country:String}' : ''}
       ORDER BY last_seen DESC
       LIMIT {limit:UInt32}
       OFFSET {offset:UInt32}
@@ -1243,6 +1415,7 @@ app.get('/api/visitors', async (req, res) => {
     const resultSet = await clickhouse.query({
       query,
       query_params: { 
+        allowedIds: allowedVisitorIds,
         limit: parseInt(limit), 
         offset: parseInt(offset),
         country: country || ''
@@ -1252,20 +1425,13 @@ app.get('/api/visitors', async (req, res) => {
     
     const visitors = await resultSet.json();
     
-    // Get total count
-    const countResult = await clickhouse.query({
-      query: `SELECT count() as total FROM visitors ${country ? 'WHERE country_code = {country:String}' : ''}`,
-      query_params: { country: country || '' },
-      format: 'JSONEachRow'
-    });
-    const countData = await countResult.json();
-    
     res.json({
       success: true,
       visitors,
-      total: parseInt(countData[0]?.total || 0),
+      total: allowedVisitorIds.length,
       limit: parseInt(limit),
       offset: parseInt(offset),
+      domains: userDomains,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1274,10 +1440,58 @@ app.get('/api/visitors', async (req, res) => {
   }
 });
 
-// Get single visitor with sessions
+// Get single visitor with sessions (filtered by user's websites)
 app.get('/api/visitors/:visitorId', async (req, res) => {
   try {
     const { visitorId } = req.params;
+    
+    // Verify user authentication
+    const user = await verifyUserToken(req);
+    
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Authentication required to view visitor data'
+      });
+    }
+    
+    // Get user's website domains
+    const userDomains = await getUserWebsiteDomains(user.id);
+    
+    if (userDomains.length === 0) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'No websites configured. Create a workflow to start tracking.'
+      });
+    }
+    
+    // Build domain filter
+    const domainPatterns = userDomains.map(d => `%${d}%`);
+    
+    // Verify this visitor has visited one of the user's websites
+    const accessCheckResult = await clickhouse.query({
+      query: `
+        SELECT count() as visits
+        FROM analytics_events
+        WHERE visitor_id = {visitorId:String}
+          AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
+        LIMIT 1
+      `,
+      query_params: { 
+        visitorId,
+        ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+      },
+      format: 'JSONEachRow'
+    });
+    
+    const accessCheck = await accessCheckResult.json();
+    
+    if (!accessCheck[0] || accessCheck[0].visits === '0') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'This visitor has not accessed your websites'
+      });
+    }
     
     // Get visitor info
     const visitorResult = await clickhouse.query({
@@ -1328,7 +1542,7 @@ app.get('/api/visitors/:visitorId', async (req, res) => {
     });
     const sessions = await sessionsResult.json();
     
-    // Get page views for visitor
+    // Get page views for visitor (only from user's websites)
     const pagesResult = await clickhouse.query({
       query: `
         SELECT 
@@ -1340,10 +1554,14 @@ app.get('/api/visitors/:visitorId', async (req, res) => {
           scroll_depth
         FROM page_views
         WHERE visitor_id = {visitorId:String}
+          AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
         ORDER BY timestamp DESC
         LIMIT 100
       `,
-      query_params: { visitorId },
+      query_params: { 
+        visitorId,
+        ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+      },
       format: 'JSONEachRow'
     });
     const pages = await pagesResult.json();
@@ -1372,6 +1590,7 @@ app.get('/api/visitors/:visitorId', async (req, res) => {
       sessions,
       pages,
       activity,
+      domains: userDomains,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1380,7 +1599,7 @@ app.get('/api/visitors/:visitorId', async (req, res) => {
   }
 });
 
-// Get visitors by country
+// Get visitors by country (filtered by user's websites)
 app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
   try {
     const { countryCode } = req.params;
@@ -1402,6 +1621,70 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
       });
     }
     
+    // Verify user authentication
+    const user = await verifyUserToken(req);
+    
+    if (!user) {
+      return res.json({
+        success: true,
+        countryCode,
+        visitors: [],
+        recentSessions: [],
+        total: 0,
+        message: 'Authentication required to view visitor data',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Get user's website domains
+    const userDomains = await getUserWebsiteDomains(user.id);
+    
+    if (userDomains.length === 0) {
+      return res.json({
+        success: true,
+        countryCode,
+        visitors: [],
+        recentSessions: [],
+        total: 0,
+        message: 'No websites configured. Create a workflow to start tracking.',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Build domain filter - get visitor IDs from analytics_events that match user's domains
+    const domainPatterns = userDomains.map(d => `%${d}%`);
+    
+    // First, get visitor IDs that have visited user's websites
+    const visitorIdsResult = await clickhouse.query({
+      query: `
+        SELECT DISTINCT visitor_id
+        FROM analytics_events
+        WHERE country_code = {countryCode:String}
+          AND visitor_id != ''
+          AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
+        LIMIT 1000
+      `,
+      query_params: { 
+        countryCode,
+        ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+      },
+      format: 'JSONEachRow'
+    });
+    
+    const allowedVisitorIds = (await visitorIdsResult.json()).map(v => v.visitor_id);
+    
+    if (allowedVisitorIds.length === 0) {
+      return res.json({
+        success: true,
+        countryCode,
+        visitors: [],
+        recentSessions: [],
+        total: 0,
+        message: 'No visitors from this country on your websites',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     const resultSet = await clickhouse.query({
       query: `
         SELECT 
@@ -1415,15 +1698,16 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
           primary_browser
         FROM visitors
         WHERE country_code = {countryCode:String}
+          AND visitor_id IN ({visitorIds:Array(String)})
         ORDER BY last_seen DESC
         LIMIT {limit:UInt32}
       `,
-      query_params: { countryCode, limit: parseInt(limit) },
+      query_params: { countryCode, visitorIds: allowedVisitorIds, limit: parseInt(limit) },
       format: 'JSONEachRow'
     });
     
     const visitors = await resultSet.json();
-    console.log(`✅ Found ${visitors.length} visitors for ${countryCode}`);
+    console.log(`✅ Found ${visitors.length} visitors for ${countryCode} (user: ${user.id})`);
     
     // Get recent sessions for these visitors
     const visitorIds = visitors.map(v => v.visitor_id);
@@ -1458,6 +1742,7 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
       visitors,
       recentSessions,
       total: visitors.length,
+      domains: userDomains,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -1474,25 +1759,56 @@ app.get('/api/visitors/by-country/:countryCode', async (req, res) => {
 
 // --- ClickHouse Analytics API Endpoints ---
 
-// Dashboard Aggregated Stats
+// Dashboard Aggregated Stats (filtered by user's websites)
 app.get('/api/analytics/dashboard', async (req, res) => {
   try {
     const { days = 30 } = req.query;
     
-    // Parallel fetch: Supabase for workflows, ClickHouse for events
+    // Verify user authentication
+    const user = await verifyUserToken(req);
+    
+    if (!user) {
+      return res.json({
+        success: true,
+        stats: {
+          totalPlaybooks: 0,
+          activePlaybooks: 0,
+          totalEvents: 0,
+          uniqueSessions: 0,
+          message: 'Authentication required to view dashboard stats'
+        }
+      });
+    }
+    
+    // Get user's website domains
+    const userDomains = await getUserWebsiteDomains(user.id);
+    
+    // Parallel fetch: Supabase for user's workflows, ClickHouse for user's events
     const [workflowsResult, eventsResult] = await Promise.all([
-        supabase.from('workflows').select('id, status', { count: 'exact' }),
-        clickhouse.query({
+        supabase.from('workflows').select('id, status', { count: 'exact' }).eq('user_id', user.id),
+        (async () => {
+          if (userDomains.length === 0) {
+            return { json: () => Promise.resolve([{ total_events: 0, unique_sessions: 0 }]) };
+          }
+          
+          const domainPatterns = userDomains.map(d => `%${d}%`);
+          
+          return clickhouse.query({
             query: `
                 SELECT 
                     count() as total_events,
                     uniq(session_id) as unique_sessions
                 FROM analytics_events
                 WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+                  AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
             `,
-            query_params: { days: parseInt(days) },
+            query_params: { 
+              days: parseInt(days),
+              ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+            },
             format: 'JSONEachRow'
-        })
+          });
+        })()
     ]);
 
     const workflows = workflowsResult.data || [];
@@ -1506,7 +1822,8 @@ app.get('/api/analytics/dashboard', async (req, res) => {
             activePlaybooks: workflows.filter(w => w.status === 'active').length,
             totalEvents: parseInt(eventStats.total_events),
             uniqueSessions: parseInt(eventStats.unique_sessions)
-        }
+        },
+        domains: userDomains
     });
   } catch (error) {
       console.error('Dashboard stats error:', error);
@@ -1524,15 +1841,110 @@ app.get('/api/analytics/dashboard', async (req, res) => {
   }
 });
 
-// Real-time Live Users Widget
+// Helper function to verify Supabase JWT and get user
+async function verifyUserToken(req) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+    }
+    
+    const token = authHeader.substring(7);
+    try {
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) {
+            console.log('⚠️ Token verification failed:', error?.message);
+            return null;
+        }
+        return user;
+    } catch (error) {
+        console.error('❌ Token verification error:', error);
+        return null;
+    }
+}
+
+// Helper function to get user's website domains from their workflows
+async function getUserWebsiteDomains(userId) {
+    try {
+        const { data: workflows, error } = await supabase
+            .from('workflows')
+            .select('target_url')
+            .eq('user_id', userId);
+        
+        if (error) {
+            console.error('Error fetching user workflows:', error);
+            return [];
+        }
+        
+        // Extract unique domains from target URLs
+        const domains = new Set();
+        workflows.forEach(w => {
+            if (w.target_url && w.target_url !== '*') {
+                try {
+                    // Handle different URL formats
+                    let domain = w.target_url;
+                    if (domain.startsWith('http')) {
+                        domain = new URL(domain).hostname;
+                    } else if (domain.startsWith('/')) {
+                        // Path-based, skip
+                        return;
+                    }
+                    domains.add(domain.toLowerCase());
+                } catch (e) {
+                    // If it's not a valid URL, try to extract domain pattern
+                    const domainMatch = w.target_url.match(/([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/);
+                    if (domainMatch) {
+                        domains.add(domainMatch[0].toLowerCase());
+                    }
+                }
+            }
+        });
+        
+        return Array.from(domains);
+    } catch (error) {
+        console.error('Error getting user website domains:', error);
+        return [];
+    }
+}
+
+// Real-time Live Users Widget (filtered by user's websites)
 app.get('/api/analytics/live', async (req, res) => {
     try {
+        // Verify user authentication
+        const user = await verifyUserToken(req);
+        
+        if (!user) {
+            // No auth - return 0 live users for security
+            return res.json({
+                success: true,
+                liveUsers: 0,
+                message: 'Authentication required to view live data',
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Get user's website domains
+        const userDomains = await getUserWebsiteDomains(user.id);
+        
+        if (userDomains.length === 0) {
+            return res.json({
+                success: true,
+                liveUsers: 0,
+                message: 'No websites configured. Create a workflow to start tracking.',
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Build domain filter for ClickHouse query
+        const domainPatterns = userDomains.map(d => `%${d}%`);
+        
         const resultSet = await clickhouse.query({
             query: `
                 SELECT uniq(session_id) as live_users 
                 FROM analytics_events 
                 WHERE timestamp >= now() - INTERVAL 5 MINUTE
+                  AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
             `,
+            query_params: Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d])),
             format: 'JSONEachRow'
         });
         
@@ -1540,6 +1952,7 @@ app.get('/api/analytics/live', async (req, res) => {
         res.json({
             success: true,
             liveUsers: parseInt(data[0]?.live_users || 0),
+            domains: userDomains,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -1548,7 +1961,7 @@ app.get('/api/analytics/live', async (req, res) => {
     }
 });
 
-// Real-time Live Users with Location Data for Globe Visualization
+// Real-time Live Users with Location Data for Globe Visualization (filtered by user's websites)
 // Queries analytics_events to stay in sync with /api/analytics/live endpoint
 app.get('/api/analytics/live-locations', async (req, res) => {
     try {
@@ -1563,6 +1976,34 @@ app.get('/api/analytics/live-locations', async (req, res) => {
             });
         }
 
+        // Verify user authentication
+        const user = await verifyUserToken(req);
+        
+        if (!user) {
+            // No auth - return empty data for security
+            return res.json({
+                success: true,
+                locations: [],
+                message: 'Authentication required to view live data',
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Get user's website domains
+        const userDomains = await getUserWebsiteDomains(user.id);
+        
+        if (userDomains.length === 0) {
+            return res.json({
+                success: true,
+                locations: [],
+                message: 'No websites configured. Create a workflow to start tracking.',
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Build domain filter for ClickHouse query
+        const domainPatterns = userDomains.map(d => `%${d}%`);
+
         // Query analytics_events for country data (same table as live users count)
         const resultSet = await clickhouse.query({
             query: `
@@ -1573,20 +2014,23 @@ app.get('/api/analytics/live-locations', async (req, res) => {
                 WHERE timestamp >= now() - INTERVAL 5 MINUTE
                   AND country_code != ''
                   AND country_code != 'unknown'
+                  AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
                 GROUP BY country_code
                 ORDER BY user_count DESC
                 LIMIT 100
             `,
+            query_params: Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d])),
             format: 'JSONEachRow'
         });
         
         const data = await resultSet.json();
         
-        console.log(`🌍 Live locations query returned ${data.length} countries`);
+        console.log(`🌍 Live locations for user ${user.id}: ${data.length} countries from domains: ${userDomains.join(', ')}`);
         
         res.json({
             success: true,
             locations: data,
+            domains: userDomains,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -1602,10 +2046,34 @@ app.get('/api/analytics/live-locations', async (req, res) => {
     }
 });
 
-// Timeseries Data
+// Timeseries Data (filtered by user's websites)
 app.get('/api/analytics/timeseries', async (req, res) => {
     try {
         const { days = 30 } = req.query;
+        
+        // Verify user authentication
+        const user = await verifyUserToken(req);
+        
+        if (!user) {
+          return res.json({
+            success: true,
+            data: [],
+            message: 'Authentication required to view timeseries data'
+          });
+        }
+        
+        // Get user's website domains
+        const userDomains = await getUserWebsiteDomains(user.id);
+        
+        if (userDomains.length === 0) {
+          return res.json({
+            success: true,
+            data: [],
+            message: 'No websites configured. Create a workflow to start tracking.'
+          });
+        }
+        
+        const domainPatterns = userDomains.map(d => `%${d}%`);
         
         const resultSet = await clickhouse.query({
             query: `
@@ -1615,10 +2083,14 @@ app.get('/api/analytics/timeseries', async (req, res) => {
                     uniq(session_id) as sessions
                 FROM analytics_events
                 WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+                  AND (${domainPatterns.map((_, i) => `page_url LIKE {domain${i}:String}`).join(' OR ')})
                 GROUP BY date
                 ORDER BY date ASC
             `,
-            query_params: { days: parseInt(days) },
+            query_params: { 
+              days: parseInt(days),
+              ...Object.fromEntries(domainPatterns.map((d, i) => [`domain${i}`, d]))
+            },
             format: 'JSONEachRow'
         });
 
@@ -1626,7 +2098,8 @@ app.get('/api/analytics/timeseries', async (req, res) => {
         
         res.json({
             success: true,
-            data
+            data,
+            domains: userDomains
         });
     } catch (error) {
         console.error('Timeseries error:', error);

@@ -3,7 +3,8 @@
  * Uses only sessionStorage, localStorage, and in-memory state
  * 100% GDPR-friendly, no cookies required
  * 
- * Uses unified VisitorIdentity for consistent visitor/session tracking.
+ * NOW USES TrackFlowCore for unified identity and deduplication.
+ * TrackFlowCore MUST be loaded before this script.
  * 
  * Usage:
  * const tracker = new CookieFreeJourneyTracker({
@@ -21,7 +22,25 @@
 (function() {
   'use strict';
 
-  // Storage keys
+  // ============================================================================
+  // TrackFlowCore Integration
+  // ============================================================================
+  
+  /**
+   * Get TrackFlowCore or create a minimal fallback
+   * TrackFlowCore should be loaded first, but we provide fallback for safety
+   */
+  function getCore() {
+    if (window.TrackFlowCore) {
+      return window.TrackFlowCore;
+    }
+    
+    // Fallback implementation if TrackFlowCore isn't loaded yet
+    console.warn('🛤️ Journey Tracker: TrackFlowCore not found, using fallback identity');
+    return null;
+  }
+
+  // Storage keys (used for fallback if TrackFlowCore not available)
   const STORAGE_PREFIX = 'tf_';
   const VISITOR_ID_KEY = STORAGE_PREFIX + 'visitor_id';
   const VISITOR_NAME_KEY = STORAGE_PREFIX + 'visitor_name';
@@ -34,7 +53,7 @@
   const SESSION_TIMEOUT = 30 * 60 * 1000;
 
   /**
-   * Generate random ID string
+   * Generate random ID string (fallback)
    */
   function generateRandomId(length = 16) {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -55,8 +74,15 @@
 
   /**
    * Get or create persistent visitor ID
+   * Uses TrackFlowCore if available, otherwise fallback
    */
   function getOrCreateVisitorId() {
+    const core = getCore();
+    if (core) {
+      return core.getVisitorId();
+    }
+    
+    // Fallback implementation
     try {
       let visitorId = localStorage.getItem(VISITOR_ID_KEY);
       
@@ -75,8 +101,15 @@
 
   /**
    * Get or create session ID
+   * Uses TrackFlowCore if available, otherwise fallback
    */
   function getOrCreateSessionId() {
+    const core = getCore();
+    if (core) {
+      return core.getSessionId();
+    }
+    
+    // Fallback implementation
     try {
       let sessionId = sessionStorage.getItem(SESSION_ID_KEY);
       const lastActivity = sessionStorage.getItem(LAST_ACTIVITY_KEY);
@@ -102,8 +135,15 @@
 
   /**
    * Generate anonymous name from visitor ID (deterministic)
+   * Uses TrackFlowCore if available, otherwise fallback
    */
   function generateAnonymousName(visitorId) {
+    const core = getCore();
+    if (core) {
+      return core.getAnonymousName(visitorId);
+    }
+    
+    // Fallback implementation
     const adjectives = [
       'Useful', 'Clever', 'Swift', 'Happy', 'Bright', 'Brave', 'Calm', 'Daring',
       'Eager', 'Fancy', 'Gentle', 'Handy', 'Jolly', 'Kind', 'Lucky', 'Merry',
@@ -127,6 +167,10 @@
 
     return `${adjectives[adjIndex]} ${animals[animalIndex]}`;
   }
+
+  // ============================================================================
+  // Journey Tracker Class
+  // ============================================================================
   
   class CookieFreeJourneyTracker {
     constructor(config = {}) {
@@ -140,7 +184,7 @@
         ...config
       };
       
-      // Initialize unified identity
+      // Initialize unified identity (using TrackFlowCore if available)
       this.visitorId = getOrCreateVisitorId();
       this.sessionId = getOrCreateSessionId();
       this.anonymousName = this.getOrCreateAnonymousName();
@@ -167,12 +211,19 @@
       this.log(`🆔 Visitor ID: ${this.visitorId}`);
       this.log(`🔄 Session ID: ${this.sessionId}`);
       this.log(`👤 Anonymous Name: ${this.anonymousName}`);
+      this.log(`🎯 Using TrackFlowCore: ${!!getCore()}`);
     }
 
     /**
      * Get or create anonymous name for this visitor
      */
     getOrCreateAnonymousName() {
+      const core = getCore();
+      if (core) {
+        return core.getAnonymousName(this.visitorId);
+      }
+      
+      // Fallback
       try {
         let name = localStorage.getItem(VISITOR_NAME_KEY);
         if (!name) {
@@ -186,9 +237,23 @@
     }
 
     /**
-     * Fetch geolocation data via IP-based service
+     * Fetch geolocation data via TrackFlowCore or direct API call
      */
     async fetchGeolocation() {
+      const core = getCore();
+      
+      // Use TrackFlowCore's shared geolocation if available
+      if (core) {
+        try {
+          this.geolocationData = await core.getGeolocation();
+          this.log('🌍 Using shared geolocation from TrackFlowCore: ' + this.geolocationData.countryCode);
+          return;
+        } catch (e) {
+          this.log('⚠️ TrackFlowCore geolocation failed, trying direct fetch', 'warning');
+        }
+      }
+      
+      // Fallback: Check local cache
       const cached = sessionStorage.getItem(this.config.storagePrefix + 'geo');
       if (cached) {
         try {
@@ -200,6 +265,7 @@
         }
       }
 
+      // Fallback: Direct API call
       try {
         const response = await fetch('https://ipapi.co/json/', {
           method: 'GET',
@@ -323,6 +389,11 @@
     }
 
     getVisitCount() {
+      const core = getCore();
+      if (core) {
+        return core.getVisitCount();
+      }
+      
       try {
         return parseInt(localStorage.getItem(SESSION_COUNT_KEY) || '1', 10);
       } catch (e) {
@@ -331,6 +402,11 @@
     }
 
     getDaysSinceFirstVisit() {
+      const core = getCore();
+      if (core) {
+        return core.getDaysSinceFirstVisit();
+      }
+      
       try {
         const firstVisit = localStorage.getItem(FIRST_SEEN_KEY);
         if (!firstVisit) return 0;
@@ -383,8 +459,19 @@
       this.trackRealTimePageView(pageData);
     }
 
+    /**
+     * Track real-time page view to analytics endpoint
+     * NOW WITH DEDUPLICATION via TrackFlowCore
+     */
     trackRealTimePageView(pageData) {
       if (!this.config.apiEndpoint) return;
+
+      // Check for duplicate tracking using TrackFlowCore
+      const core = getCore();
+      if (core && core.isPageViewTracked()) {
+        this.log('⏭️ Page view already tracked by TrackFlowCore, skipping duplicate', 'warning');
+        return;
+      }
 
       try {
         const countryCode = this.geolocationData?.countryCode || 'unknown';
@@ -408,7 +495,8 @@
               title: pageData.title,
               referrer: pageData.referrer,
               country: this.geolocationData?.country || '',
-              countryCode: countryCode
+              countryCode: countryCode,
+              source: 'journey_tracker' // Mark the source for debugging
             }
           }]
         };
@@ -420,7 +508,15 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           keepalive: true
-        }).catch(() => {});
+        })
+        .then(() => {
+          // Mark as tracked to prevent duplicates
+          if (core) {
+            core.markPageViewTracked();
+            this.log('✅ Page view sent and marked as tracked', 'success');
+          }
+        })
+        .catch(() => {});
       } catch (e) {
         // Ignore errors
       }
@@ -723,6 +819,11 @@
     }
 
     getDeviceType() {
+      const core = getCore();
+      if (core) {
+        return core.getDeviceType();
+      }
+      
       const ua = navigator.userAgent;
       if (/mobile/i.test(ua)) return 'mobile';
       if (/tablet|ipad/i.test(ua)) return 'tablet';
@@ -730,6 +831,11 @@
     }
 
     getBrowserInfo() {
+      const core = getCore();
+      if (core) {
+        return core.getBrowser();
+      }
+      
       const ua = navigator.userAgent;
       if (ua.includes('DuckDuckGo')) return 'DuckDuckGo';
       if (ua.includes('Firefox')) return 'Firefox';
@@ -740,6 +846,11 @@
     }
 
     getOS() {
+      const core = getCore();
+      if (core) {
+        return core.getOS();
+      }
+      
       const ua = navigator.userAgent;
       if (ua.includes('Windows')) return 'Windows';
       if (ua.includes('Mac')) return 'MacOS';
@@ -818,7 +929,8 @@
           size: localKeys.reduce((sum, k) => sum + (localStorage.getItem(k) || '').length, 0)
         },
         cookiesUsed: 0,
-        privacyFriendly: true
+        privacyFriendly: true,
+        usingTrackFlowCore: !!getCore()
       };
     }
   }
@@ -827,12 +939,14 @@
   window.CookieFreeJourneyTracker = CookieFreeJourneyTracker;
   window.JourneyTracker = CookieFreeJourneyTracker;
   
-  // Also expose identity helpers for other scripts
-  window.TrackFlowIdentity = {
-    getVisitorId: getOrCreateVisitorId,
-    getSessionId: getOrCreateSessionId,
-    generateAnonymousName
-  };
+  // Only expose TrackFlowIdentity if TrackFlowCore hasn't already done so
+  if (!window.TrackFlowIdentity) {
+    window.TrackFlowIdentity = {
+      getVisitorId: getOrCreateVisitorId,
+      getSessionId: getOrCreateSessionId,
+      generateAnonymousName
+    };
+  }
   
   // Auto-initialize if not disabled
   if (!window.DISABLE_AUTO_JOURNEY_TRACKING) {

@@ -160,10 +160,21 @@
     }
 
     /**
-     * Fetch geolocation data using IP-based service
+     * Fetch geolocation data using TrackFlowCore (shared cache to prevent duplicates)
      */
     async fetchGeolocationData() {
-      // Check if geolocation data is already cached in session
+      // Use TrackFlowCore if available for shared geolocation cache
+      if (window.TrackFlowCore) {
+        try {
+          this.geolocationData = await window.TrackFlowCore.getGeolocation();
+          this.log('🌍 Using shared geolocation from TrackFlowCore', 'info', this.geolocationData);
+          return;
+        } catch (e) {
+          this.log('⚠️ TrackFlowCore geolocation failed, using fallback', 'warning');
+        }
+      }
+
+      // Fallback: Check if geolocation data is already cached in session
       const cached = sessionStorage.getItem('workflow_geolocation_data');
       if (cached) {
         try {
@@ -172,6 +183,21 @@
           return;
         } catch (e) {
           this.log('⚠️ Invalid cached geolocation data, fetching fresh', 'warning');
+        }
+      }
+
+      // Also check TrackFlowCore's cache key
+      const coreCache = sessionStorage.getItem('tf_geo');
+      if (coreCache) {
+        try {
+          const parsed = JSON.parse(coreCache);
+          if (parsed && parsed.data) {
+            this.geolocationData = parsed.data;
+            this.log('🌍 Using TrackFlowCore cached geolocation', 'info', this.geolocationData);
+            return;
+          }
+        } catch (e) {
+          // Continue to fetch
         }
       }
 
@@ -2648,8 +2674,21 @@
       };
     }
 
+    /**
+     * Get session ID using TrackFlowCore (unified identity)
+     */
     getSessionId() {
+      // Use TrackFlowCore if available
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getSessionId();
+      }
+      
+      // Fallback to legacy implementation
       let sessionId = sessionStorage.getItem('workflow_session_id');
+      if (!sessionId) {
+        // Also check TrackFlowCore's key
+        sessionId = sessionStorage.getItem('tf_session_id');
+      }
       if (!sessionId) {
         sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         sessionStorage.setItem('workflow_session_id', sessionId);
@@ -2657,17 +2696,35 @@
       return sessionId;
     }
 
+    /**
+     * Get visit count using TrackFlowCore (unified identity)
+     */
     getVisitCount() {
+      // Use TrackFlowCore if available
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getVisitCount();
+      }
+      
+      // Fallback to legacy implementation
       const count = parseInt(localStorage.getItem('workflow_visit_count') || '0') + 1;
       localStorage.setItem('workflow_visit_count', count.toString());
       return count;
     }
 
     isReturningVisitor() {
+      // Use TrackFlowCore if available
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getVisitCount() > 1;
+      }
       return localStorage.getItem('workflow_first_visit') !== null;
     }
 
     getBrowser() {
+      // Use TrackFlowCore if available
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getBrowser();
+      }
+      
       const ua = navigator.userAgent;
       if (ua.includes('Chrome')) return 'Chrome';
       if (ua.includes('Firefox')) return 'Firefox';
@@ -3028,8 +3085,15 @@
 
     /**
      * Generate a simple session ID for tracking
+     * Uses TrackFlowCore for unified session management
      */
     generateSessionId() {
+      // Use TrackFlowCore if available for unified session ID
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getSessionId();
+      }
+      
+      // Fallback to cached session ID
       if (!this._sessionId) {
         this._sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
@@ -3038,8 +3102,14 @@
 
     /**
      * Get or create a persistent visitor ID
+     * Uses TrackFlowCore for unified visitor management
      */
     getVisitorId() {
+      // Use TrackFlowCore if available (primary source)
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getVisitorId();
+      }
+      
       // Try to get from TrackFlowIdentity (set by journey-tracker)
       if (window.TrackFlowIdentity?.getVisitorId) {
         return window.TrackFlowIdentity.getVisitorId();
@@ -3067,8 +3137,14 @@
 
     /**
      * Generate anonymous name from visitor ID (deterministic)
+     * Uses TrackFlowCore for unified name generation
      */
     getAnonymousName(visitorId) {
+      // Use TrackFlowCore if available (primary source)
+      if (window.TrackFlowCore) {
+        return window.TrackFlowCore.getAnonymousName(visitorId);
+      }
+      
       // Try to get from TrackFlowIdentity
       if (window.TrackFlowIdentity?.generateAnonymousName) {
         return window.TrackFlowIdentity.generateAnonymousName(visitorId);
