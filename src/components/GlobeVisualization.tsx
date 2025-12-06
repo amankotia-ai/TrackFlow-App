@@ -121,6 +121,12 @@ const GlobeVisualization: React.FC = () => {
   // Use a ref to store the stable marker objects for Cobe
   const markersRef = useRef<Marker[]>([]);
   const locationDataRef = useRef<LocationData[]>([]);
+  
+  // Drag-to-pan state
+  const pointerInteracting = useRef<number | null>(null);
+  const pointerInteractionMovement = useRef(0);
+  const phiRef = useRef(1.3); // Track phi for drag control
+  const thetaRef = useRef(0.2); // Track theta for drag control
 
   // Fetch live user data from both endpoints to stay in sync
   useEffect(() => {
@@ -184,10 +190,8 @@ const GlobeVisualization: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Globe initialization
+  // Globe initialization with drag-to-pan support
   useEffect(() => {
-    // Start showing Asia/India region (phi ~1.3 shows India)
-    let phi = 1.3;
     let width = 0;
     let height = 0;
 
@@ -206,8 +210,8 @@ const GlobeVisualization: React.FC = () => {
       devicePixelRatio: 2,
       width: width * 2,
       height: height * 2,
-      phi: 1.3, // Start showing Asia/India
-      theta: 0.2,
+      phi: phiRef.current, // Start showing Asia/India
+      theta: thetaRef.current,
       dark: 0,
       diffuse: 1.2,
       mapSamples: 24000,
@@ -217,9 +221,13 @@ const GlobeVisualization: React.FC = () => {
       glowColor: [0.85, 0.85, 0.85],
       markers: markersRef.current,
       onRender: (state) => {
-        // Slow rotation to show all regions
-        state.phi = phi;
-        phi += 0.004; // Slightly faster rotation
+        // Only auto-rotate when not being dragged
+        if (pointerInteracting.current === null) {
+          phiRef.current += 0.003; // Slow auto-rotation
+        }
+        
+        state.phi = phiRef.current + pointerInteractionMovement.current;
+        state.theta = thetaRef.current;
         
         // Responsive Sizing
         state.width = width * 2;
@@ -230,9 +238,50 @@ const GlobeVisualization: React.FC = () => {
       }
     });
 
+    // Pointer event handlers for drag-to-pan
+    const canvas = canvasRef.current;
+    
+    const onPointerDown = (e: PointerEvent) => {
+      pointerInteracting.current = e.clientX;
+      canvas.style.cursor = 'grabbing';
+    };
+    
+    const onPointerUp = () => {
+      pointerInteracting.current = null;
+      canvas.style.cursor = 'grab';
+      // Apply the movement to the base phi
+      phiRef.current += pointerInteractionMovement.current;
+      pointerInteractionMovement.current = 0;
+    };
+    
+    const onPointerOut = () => {
+      if (pointerInteracting.current !== null) {
+        pointerInteracting.current = null;
+        canvas.style.cursor = 'grab';
+        phiRef.current += pointerInteractionMovement.current;
+        pointerInteractionMovement.current = 0;
+      }
+    };
+    
+    const onPointerMove = (e: PointerEvent) => {
+      if (pointerInteracting.current !== null) {
+        const delta = e.clientX - pointerInteracting.current;
+        pointerInteractionMovement.current = delta / 100; // Sensitivity
+      }
+    };
+    
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointerout', onPointerOut);
+    canvas.addEventListener('pointermove', onPointerMove);
+
     return () => {
       globe.destroy();
       window.removeEventListener('resize', onResize);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointerout', onPointerOut);
+      canvas.removeEventListener('pointermove', onPointerMove);
     };
   }, []);
 
@@ -274,7 +323,7 @@ const GlobeVisualization: React.FC = () => {
         <p className="text-xs text-zinc-500 mt-1">Real-time user sessions and workflow executions</p>
       </div>
       
-      <div className="relative flex-1 w-full h-full overflow-hidden" onClick={handleGlobeClick}>
+      <div className="relative flex-1 w-full h-full overflow-hidden">
         <canvas
             ref={canvasRef}
             style={{ 
@@ -282,7 +331,8 @@ const GlobeVisualization: React.FC = () => {
                 height: '100%',
                 contain: 'layout paint size',
                 opacity: 1,
-                cursor: 'grab'
+                cursor: 'grab',
+                touchAction: 'none' // Prevent default touch behavior for smooth dragging
             }}
         />
         
