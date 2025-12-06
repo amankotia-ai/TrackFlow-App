@@ -148,18 +148,25 @@ const GlobeVisualization: React.FC = () => {
           locationDataRef.current.forEach((loc, index) => {
             const coords = COUNTRY_COORDINATES[loc.country_code] || COUNTRY_COORDINATES['unknown'];
             if (coords[0] !== 0 || coords[1] !== 0) {
-              // Add multiple markers for countries with more users
+              // Add markers for this country - larger size for visibility
               const markerCount = Math.min(loc.user_count, 5);
               for (let i = 0; i < markerCount; i++) {
                 newMarkers.push({
                   location: [
-                    coords[0] + (Math.random() - 0.5) * 5,
-                    coords[1] + (Math.random() - 0.5) * 5
+                    coords[0] + (Math.random() - 0.5) * 3,
+                    coords[1] + (Math.random() - 0.5) * 3
                   ] as [number, number],
-                  size: 0.08 + Math.random() * 0.04,
+                  size: 0.15 + Math.random() * 0.05, // Much larger markers (0.15-0.20)
                   color: MARKER_COLORS[(index + i) % MARKER_COLORS.length]
                 });
               }
+              
+              // Add a main marker at exact coordinates for each country
+              newMarkers.push({
+                location: [coords[0], coords[1]] as [number, number],
+                size: 0.12,
+                color: MARKER_COLORS[index % MARKER_COLORS.length]
+              });
             }
           });
           
@@ -179,7 +186,8 @@ const GlobeVisualization: React.FC = () => {
 
   // Globe initialization
   useEffect(() => {
-    let phi = 0;
+    // Start showing Asia/India region (phi ~1.3 shows India)
+    let phi = 1.3;
     let width = 0;
     let height = 0;
 
@@ -198,20 +206,20 @@ const GlobeVisualization: React.FC = () => {
       devicePixelRatio: 2,
       width: width * 2,
       height: height * 2,
-      phi: 0,
-      theta: 0.25,
+      phi: 1.3, // Start showing Asia/India
+      theta: 0.2,
       dark: 0,
       diffuse: 1.2,
       mapSamples: 24000,
       mapBrightness: 4,
       baseColor: [0.95, 0.95, 0.95],
-      markerColor: [0.2, 0.5, 1],
+      markerColor: [1, 0.4, 0.4], // Red-ish markers for better visibility
       glowColor: [0.85, 0.85, 0.85],
       markers: markersRef.current,
       onRender: (state) => {
-        // Very slow rotation
+        // Slow rotation to show all regions
         state.phi = phi;
-        phi += 0.002;
+        phi += 0.004; // Slightly faster rotation
         
         // Responsive Sizing
         state.width = width * 2;
