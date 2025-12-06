@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Eye, Clock, ChevronDown, ChevronUp, Monitor, Smartphone, Tablet, Globe } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Eye, Clock, ChevronDown, ChevronUp, Monitor, Smartphone, Tablet, Globe, Zap } from 'lucide-react';
 
 // Browser icons
 const BROWSER_ICONS: Record<string, string> = {
@@ -43,10 +43,49 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
   pages,
   className = ''
 }) => {
-  const [expandedSession, setExpandedSession] = useState<string | null>(
-    sessions.length > 0 ? sessions[0].session_id : null
-  );
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
   const [showAllPages, setShowAllPages] = useState<Record<string, boolean>>({});
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Update current time every 30 seconds for relative time display
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-expand the first active session
+  useEffect(() => {
+    const activeSession = sessions.find(s => isSessionActive(s));
+    if (activeSession) {
+      setExpandedSession(activeSession.session_id);
+    } else if (sessions.length > 0 && !expandedSession) {
+      setExpandedSession(sessions[0].session_id);
+    }
+  }, [sessions]);
+
+  // Determine if session is truly active (within last 5 minutes)
+  const isSessionActive = (session: Session): boolean => {
+    const flagActive = session.is_active === 1 || session.is_active === true;
+    if (!flagActive) return false;
+    
+    // Also verify end_time is recent (within 5 min)
+    const endTime = new Date(session.end_time).getTime();
+    const fiveMinAgo = currentTime - 5 * 60 * 1000;
+    return endTime > fiveMinAgo;
+  };
+
+  // Determine how old a session is for fading
+  const getSessionAge = (session: Session): 'active' | 'recent' | 'old' | 'ancient' => {
+    if (isSessionActive(session)) return 'active';
+    
+    const endTime = new Date(session.end_time).getTime();
+    const hourAgo = currentTime - 60 * 60 * 1000;
+    const dayAgo = currentTime - 24 * 60 * 60 * 1000;
+    
+    if (endTime > hourAgo) return 'recent';
+    if (endTime > dayAgo) return 'old';
+    return 'ancient';
+  };
 
   // Group pages by session
   const pagesBySession = useMemo(() => {
@@ -77,9 +116,10 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
     return `${hours}h ${minutes % 60}m`;
   };
 
-  // Format timestamp
+  // Format timestamp - ensure proper UTC to local conversion
   const formatTime = (timestamp: string): string => {
-    const date = new Date(timestamp);
+    // Parse as UTC if no timezone specified
+    const date = new Date(timestamp.endsWith('Z') ? timestamp : timestamp + 'Z');
     return date.toLocaleTimeString('en-US', { 
       hour: 'numeric', 
       minute: '2-digit',
@@ -87,9 +127,9 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
     });
   };
 
-  // Format date header
+  // Format date header with proper UTC handling
   const formatDateHeader = (timestamp: string): string => {
-    const date = new Date(timestamp);
+    const date = new Date(timestamp.endsWith('Z') ? timestamp : timestamp + 'Z');
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -104,6 +144,20 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
     });
   };
 
+  // Format relative time
+  const formatRelativeTime = (timestamp: string): string => {
+    const date = new Date(timestamp.endsWith('Z') ? timestamp : timestamp + 'Z');
+    const diffMs = currentTime - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
+
   // Get device icon
   const getDeviceIcon = (deviceType: string) => {
     switch (deviceType) {
@@ -113,11 +167,17 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
     }
   };
 
-  // Group sessions by date
+  // Group sessions by date (sorted by start_time desc)
   const sessionsByDate = useMemo(() => {
     const grouped: Record<string, Session[]> = {};
-    sessions.forEach(session => {
-      const dateKey = new Date(session.start_time).toDateString();
+    // Sort sessions by start_time descending (most recent first)
+    const sortedSessions = [...sessions].sort((a, b) => 
+      new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
+    );
+    
+    sortedSessions.forEach(session => {
+      const date = new Date(session.start_time.endsWith('Z') ? session.start_time : session.start_time + 'Z');
+      const dateKey = date.toDateString();
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
       }
@@ -163,7 +223,8 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
             {/* Sessions for this date */}
             <div className="space-y-3">
               {dateSessions.map((session) => {
-                const isActive = session.is_active === 1 || session.is_active === true;
+                const isActive = isSessionActive(session);
+                const sessionAge = getSessionAge(session);
                 const sessionPages = pagesBySession[session.session_id] || [];
                 const isExpanded = expandedSession === session.session_id;
                 const showAll = showAllPages[session.session_id];
@@ -172,28 +233,60 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
                 const DeviceIcon = getDeviceIcon(session.device_type);
                 const browserIcon = BROWSER_ICONS[session.browser] || BROWSER_ICONS['Unknown'];
 
+                // Dynamic styling based on session age
+                const containerStyles = {
+                  active: 'border-emerald-300 bg-gradient-to-r from-emerald-50/50 to-transparent shadow-sm shadow-emerald-100',
+                  recent: 'border-zinc-200 bg-white',
+                  old: 'border-zinc-100 bg-zinc-50/50 opacity-70',
+                  ancient: 'border-zinc-100 bg-zinc-50/30 opacity-50'
+                };
+
+                const headerStyles = {
+                  active: 'bg-emerald-50/80 hover:bg-emerald-100/80',
+                  recent: 'bg-zinc-50 hover:bg-zinc-100',
+                  old: 'bg-zinc-50/50 hover:bg-zinc-100/50',
+                  ancient: 'bg-zinc-50/30 hover:bg-zinc-100/30'
+                };
+
                 return (
                   <div 
                     key={session.session_id}
-                    className="border border-zinc-200 rounded-lg overflow-hidden"
+                    className={`border rounded-lg overflow-hidden transition-all duration-300 ${containerStyles[sessionAge]}`}
                   >
                     {/* Session Header */}
                     <div 
-                      className="flex items-center justify-between p-3 bg-zinc-50 cursor-pointer hover:bg-zinc-100 transition-colors"
+                      className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${headerStyles[sessionAge]}`}
                       onClick={() => toggleSession(session.session_id)}
                     >
                       <div className="flex items-center gap-2">
-                        <span className={`flex h-2 w-2 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-300'}`} />
-                        <span className="text-xs text-zinc-600">
-                          Session is currently {isActive ? <strong>active</strong> : 'ended'}
-                        </span>
+                        {isActive ? (
+                          <>
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-xs font-medium text-emerald-700 flex items-center gap-1">
+                              <Zap className="size-3" />
+                              Live now
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex h-2 w-2 rounded-full bg-zinc-300" />
+                            <span className="text-xs text-zinc-500">
+                              Ended {formatRelativeTime(session.end_time)}
+                            </span>
+                          </>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-zinc-500">{session.page_count} pages</span>
+                        <span className={`text-xs ${isActive ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                          {session.page_count} pages
+                        </span>
                         {isExpanded ? (
-                          <ChevronUp className="size-4 text-zinc-400" />
+                          <ChevronUp className={`size-4 ${isActive ? 'text-emerald-500' : 'text-zinc-400'}`} />
                         ) : (
-                          <ChevronDown className="size-4 text-zinc-400" />
+                          <ChevronDown className={`size-4 ${isActive ? 'text-emerald-500' : 'text-zinc-400'}`} />
                         )}
                       </div>
                     </div>
@@ -258,15 +351,22 @@ const VisitorJourney: React.FC<VisitorJourneyProps> = ({
                         )}
 
                         {/* Session footer with device/browser info */}
-                        <div className="flex items-center justify-between pt-2 mt-2 border-t border-zinc-100">
-                          <div className="flex items-center gap-2 text-xs text-zinc-400">
+                        <div className={`flex items-center justify-between pt-2 mt-2 border-t ${isActive ? 'border-emerald-100' : 'border-zinc-100'}`}>
+                          <div className={`flex items-center gap-2 text-xs ${isActive ? 'text-emerald-600' : 'text-zinc-400'}`}>
                             <span>{browserIcon}</span>
                             <DeviceIcon className="size-3.5" />
                             <Globe className="size-3.5" />
                           </div>
-                          <span className="text-xs text-zinc-400">
-                            {formatTime(session.start_time)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs ${isActive ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                              Started {formatTime(session.start_time)}
+                            </span>
+                            {isActive && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded">
+                                LIVE
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

@@ -101,9 +101,10 @@ const VisitorProfile: React.FC<VisitorProfileProps> = ({
     'bg-emerald-500'
   ];
 
-  // Format date
+  // Format date with proper UTC handling
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    // Ensure UTC parsing if no timezone specified
+    const date = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
@@ -121,23 +122,41 @@ const VisitorProfile: React.FC<VisitorProfileProps> = ({
     <div className={`bg-white rounded-lg ${className}`}>
       {/* Avatar and Name */}
       <div className="flex flex-col items-center mb-6">
-        <div 
-          className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-semibold mb-3"
-          style={{ backgroundColor: avatarColor }}
-        >
-          {initials}
+        <div className="relative">
+          <div 
+            className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-semibold ${isOnline ? 'ring-4 ring-emerald-100' : ''}`}
+            style={{ backgroundColor: avatarColor }}
+          >
+            {initials}
+          </div>
+          {/* Online indicator badge */}
+          {isOnline && (
+            <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+            </span>
+          )}
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mt-3">
           <h2 className="text-lg font-semibold text-zinc-900">{visitor.anonymous_name || 'Unknown Visitor'}</h2>
           <DeviceIcon className="size-4 text-zinc-400" />
         </div>
         
         <div className="flex items-center gap-1.5 mt-1">
-          <span className={`flex h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-zinc-300'}`} />
-          <span className="text-xs text-zinc-500">
-            {isOnline ? 'Online' : 'Offline'}
-          </span>
+          {isOnline ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded-full">
+              <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-medium text-emerald-700">Online</span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-zinc-500">
+              <span className="flex h-2 w-2 rounded-full bg-zinc-300" />
+              <span className="text-xs">Offline</span>
+            </span>
+          )}
         </div>
       </div>
 
