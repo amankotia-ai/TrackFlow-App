@@ -1,5 +1,6 @@
 import { apiClient, ApiResponse } from '../lib/apiClient';
 import { Workflow } from '../types/workflow';
+import { workflowTemplates } from '../data/workflowTemplates';
 
 /**
  * Simple, reliable WorkflowService using the new ApiClient
@@ -58,19 +59,17 @@ export class WorkflowService {
 
   /**
    * Get workflow templates (public templates)
+   * Returns local templates from workflowTemplates.ts
    */
   static async getWorkflowTemplates(): Promise<Workflow[]> {
     console.log('📋 Loading workflow templates...');
     
-    const response: ApiResponse = await apiClient.getWorkflowTemplates();
+    // Return local templates directly
+    // These are pre-configured templates that don't require a database
+    const templates = workflowTemplates as Workflow[];
     
-    if (!response.success) {
-      console.error('Failed to load templates:', response.error);
-      throw new Error(response.error || 'Failed to load templates');
-    }
-    
-    console.log(`✅ Loaded ${response.data?.length || 0} templates`);
-    return response.data || [];
+    console.log(`✅ Loaded ${templates.length} templates`);
+    return templates;
   }
 
   /**
@@ -163,5 +162,36 @@ export class WorkflowService {
     
     console.log('✅ API key updated successfully');
     return response.data;
+  }
+
+  /**
+   * Clone a template to create a new workflow
+   */
+  static async cloneTemplate(template: any): Promise<any> {
+    console.log(`📋 Cloning template: ${template.name}...`);
+    
+    // Generate a unique ID for the new workflow
+    const newId = `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create a new workflow from the template
+    const clonedWorkflow = {
+      ...template,
+      id: newId,
+      name: `${template.name} (Copy)`,
+      status: 'draft' as const,
+      isActive: false,
+      executions: 0,
+      lastRun: undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      // Remove template metadata if it exists
+      templateMeta: undefined,
+    };
+    
+    // Save the cloned workflow
+    const savedWorkflow = await this.saveWorkflow(clonedWorkflow);
+    
+    console.log(`✅ Template cloned successfully: ${savedWorkflow.name}`);
+    return savedWorkflow;
   }
 } 

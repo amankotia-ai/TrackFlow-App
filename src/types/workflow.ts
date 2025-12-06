@@ -34,6 +34,38 @@ export interface Workflow {
   targetUrl?: string;
 }
 
+export type TemplateCategoryGroup = 'generic' | 'trigger' | 'industry';
+
+export interface TemplateMeta {
+  group: TemplateCategoryGroup;
+  categoryId: string;
+  categoryLabel: string;
+  icon?: string;
+  summary?: string;
+  difficulty?: 'Beginner' | 'Intermediate' | 'Advanced';
+  estimatedTime?: string;
+  tags?: string[];
+}
+
+export interface WorkflowTemplate extends Workflow {
+  templateMeta: TemplateMeta;
+}
+
+export interface TemplateCategory {
+  id: string;
+  label: string;
+  group: TemplateCategoryGroup;
+  description?: string;
+  icon?: string;
+}
+
+export interface TemplateCategoryGroupDefinition {
+  id: TemplateCategoryGroup;
+  label: string;
+  description: string;
+  categories: TemplateCategory[];
+}
+
 export interface NodeTemplate {
   id: string;
   type: 'trigger' | 'action' | 'condition';

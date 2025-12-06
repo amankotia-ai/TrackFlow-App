@@ -2,20 +2,16 @@ import React, { useState } from 'react';
 import { X, Target, Database } from 'lucide-react';
 import { WorkflowNode } from '../types/workflow';
 import { nodeTemplates } from '../data/nodeTemplates';
-import ElementSelectorButton from './ElementSelectorButton';
 import EnvironmentComponents from './EnvironmentComponents';
-import { ScrapedElement } from '../utils/scraperEnhanced';
 import { incrementComponentUsage } from '../services/environmentComponents';
 
 interface NodeConfigPanelProps {
   node: WorkflowNode;
   onNodeUpdate: (node: WorkflowNode) => void;
   onClose: () => void;
-  scrapedElements?: ScrapedElement[];
-  onElementSelectorOpen?: (fieldKey: string) => void;
 }
 
-const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, onClose, scrapedElements = [], onElementSelectorOpen }) => {
+const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, onClose }) => {
   // Find the template for this node by matching name and type
   const template = nodeTemplates.find(t => t.name === node.name && t.type === node.type);
   
@@ -159,22 +155,6 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
                   <Database className="w-4 h-4" />
                   <span>Components</span>
                 </button>
-                
-                {scrapedElements.length > 0 && (
-                  <ElementSelectorButton
-                    elements={scrapedElements}
-                    onElementSelect={(element, selector) => {
-                      handleConfigChange(field.key, selector);
-                      
-                      // For text replacement node, also update the originalText field
-                      if (localNode.type === 'action' && localNode.name === 'Replace Text' && field.key === 'selector') {
-                        // Update the originalText field with the selected element's text
-                        handleConfigChange('originalText', element.text);
-                      }
-                    }}
-                    className="px-4 py-3 whitespace-nowrap"
-                  />
-                )}
               </div>
               {field.description && (
                 <p className="text-xs text-secondary-500">{field.description}</p>
@@ -201,11 +181,6 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onNodeUpdate, o
                 }
                 return null;
               })()}
-              {scrapedElements.length === 0 && (
-                <p className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded border border-yellow-200">
-                  💡 Tip: Scrape a webpage first to enable element selection, use saved components, or copy selectors from the DOM tree view
-                </p>
-              )}
             </div>
           </div>
         );

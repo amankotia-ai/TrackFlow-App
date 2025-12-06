@@ -1748,6 +1748,23 @@
           case 'Redirect User':
             result = await this.redirectPage(config);
             break;
+
+          case 'Custom Event':
+            result = await this.executeCustomEvent(config);
+            break;
+
+          case 'Progressive Form':
+            result = await this.executeProgressiveForm(config);
+            break;
+
+          case 'Dynamic Content':
+            result = await this.executeDynamicContent(config);
+            break;
+            
+          case 'Click Element':
+          case 'Simulate Click':
+            result = await this.clickElement(config);
+            break;
             
           default:
             this.log(`⚠️ Unknown action: ${name}`, 'warning');
@@ -2393,6 +2410,207 @@
       
       this.log(`✅ Redirect scheduled to: ${config.url}`);
       return { success: true };
+    }
+
+    async executeCustomEvent(config) {
+      try {
+        // Send custom event to analytics or dispatch locally
+        const eventName = config.eventName;
+        const eventData = config.eventData;
+        
+        this.log(`📡 Executing custom event: ${eventName}`, 'info', eventData);
+        
+        // 1. Dispatch to window for local listeners
+        const customEvent = new CustomEvent(eventName, { 
+          detail: eventData,
+          bubbles: true 
+        });
+        window.dispatchEvent(customEvent);
+        
+        // 2. If target element specified, dispatch there too
+        if (config.targetSelector) {
+          const elements = document.querySelectorAll(config.targetSelector);
+          elements.forEach(el => el.dispatchEvent(customEvent));
+        }
+        
+        // 3. Integrate with any existing analytics trackers
+        if (window.elementTracker) {
+          window.elementTracker.addEvent({
+            eventType: 'custom_workflow_event',
+            eventName: eventName,
+            eventData: eventData,
+            timestamp: Date.now(),
+            pageContext: this.pageContext
+          });
+        }
+        
+        // 4. Track in our own system
+        if (this.journeyTracker) {
+          this.journeyTracker.trackEvent({
+            type: 'custom_event',
+            target: eventName,
+            data: eventData
+          });
+        }
+        
+        return { success: true, eventName };
+      } catch (error) {
+        this.log(`❌ Custom event failed: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+      }
+    }
+
+    async executeProgressiveForm(config) {
+      try {
+        const triggerSelector = config.triggerField || config.selector;
+        const additionalFieldsSelector = config.additionalFields;
+        
+        if (!triggerSelector || !additionalFieldsSelector) {
+          return { success: false, error: 'Missing selectors' };
+        }
+        
+        await this.waitForElement(triggerSelector);
+        
+        const triggerFields = document.querySelectorAll(triggerSelector);
+        const additionalFields = document.querySelectorAll(additionalFieldsSelector);
+        
+        if (!triggerFields.length || !additionalFields.length) {
+          return { success: false, error: 'Elements not found' };
+        }
+        
+        // Initially hide additional fields
+        additionalFields.forEach(field => {
+          field.style.display = 'none';
+        });
+        
+        let activated = false;
+        
+        // Add focus listener to show fields
+        triggerFields.forEach(trigger => {
+          trigger.addEventListener('focus', () => {
+            if (activated) return;
+            activated = true;
+            
+            additionalFields.forEach(field => {
+              field.style.display = 'block';
+              
+              if (config.animation === 'slide') {
+                field.style.transform = 'translateY(-10px)';
+                field.style.opacity = '0';
+                field.style.transition = 'all 0.3s ease';
+                
+                requestAnimationFrame(() => {
+                  field.style.transform = 'translateY(0)';
+                  field.style.opacity = '1';
+                });
+              } else if (config.animation === 'fade') {
+                field.style.opacity = '0';
+                field.style.transition = 'opacity 0.3s ease';
+                
+                requestAnimationFrame(() => {
+                  field.style.opacity = '1';
+                });
+              }
+            });
+            
+            this.log(`✅ Progressive form expanded via interaction with ${triggerSelector}`);
+          }, { once: true });
+        });
+        
+        return { success: true, message: 'Progressive form listeners attached' };
+        
+      } catch (error) {
+        this.log(`❌ Progressive form failed: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+      }
+    }
+
+    async executeDynamicContent(config) {
+      try {
+        const selector = config.targetContainer || config.selector;
+        if (!selector) return { success: false, error: 'Missing selector' };
+        
+        await this.waitForElement(selector);
+        
+        const elements = document.querySelectorAll(selector);
+        if (!elements.length) return { success: false, error: 'Container not found' };
+        
+        const template = config.contentTemplate || config.content || '';
+        
+        // Replace placeholders with context data
+        // Supports {{user.name}}, {{page.url}}, {{utm.source}}, {{geo.city}} etc.
+        const replacePlaceholders = (text) => {
+          return text.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+            const path = key.trim().split('.');
+            let value = undefined;
+            
+            if (path[0] === 'user') value = this.userContext[path[1]];
+            else if (path[0] === 'page') value = this.pageContext[path[1]];
+            else if (path[0] === 'utm') value = this.pageContext.utm?.[path[1]];
+            else if (path[0] === 'geo') value = this.geolocationData?.[path[1]];
+            else value = this.userContext[key] || this.pageContext[key]; // Fallback to top level
+            
+            return value !== undefined ? value : match;
+          });
+        };
+        
+        const newContent = replacePlaceholders(template);
+        
+        elements.forEach(element => {
+          element.innerHTML = newContent;
+        });
+        
+        this.completedModifications.add(`dynamicContent:${selector}`);
+        this.log(`✅ Dynamic content injected into ${elements.length} elements`);
+        
+        return { success: true, elements: elements.length };
+        
+      } catch (error) {
+        this.log(`❌ Dynamic content failed: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+      }
+    }
+
+    async clickElement(config) {
+      try {
+        await this.waitForElement(config.selector);
+        const elements = document.querySelectorAll(config.selector);
+        
+        if (!elements.length) {
+          return { success: false, error: 'No elements found to click' };
+        }
+        
+        // Apply delay if specified
+        if (config.delay) {
+          await this.delay(config.delay);
+        }
+        
+        let clickCount = 0;
+        elements.forEach(element => {
+          // Create and dispatch a proper click event sequence
+          const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window });
+          const mouseUp = new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window });
+          const click = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+          
+          element.dispatchEvent(mouseDown);
+          element.dispatchEvent(mouseUp);
+          element.dispatchEvent(click);
+          
+          // Also try the native click method as backup
+          if (element.click) {
+            element.click();
+          }
+          
+          clickCount++;
+        });
+        
+        this.log(`✅ Simulated click on ${clickCount} elements (${config.selector})`);
+        return { success: true, clicks: clickCount };
+        
+      } catch (error) {
+        this.log(`❌ Click element failed: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+      }
     }
 
     // Utility methods

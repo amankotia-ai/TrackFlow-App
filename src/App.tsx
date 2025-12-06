@@ -8,156 +8,189 @@ import WorkflowList from './components/WorkflowList';
 import WorkflowBuilder from './components/WorkflowBuilder';
 import Templates from './components/Templates';
 import Analytics from './components/Analytics';
+import Executions from './components/Executions';
+import Reports from './components/Reports';
 import ApiKeyManager from './components/ApiKeyManager';
 import Settings from './components/Settings';
 import Auth from './components/Auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import NewWorkflowModal, { NewWorkflowData } from './components/NewWorkflowModal';
 import { ToastProvider, useToast } from './components/Toast';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Plus } from 'lucide-react';
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 
 // Simple loading component
 function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-secondary-50 flex items-center justify-center">
+    <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="text-center">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary-600" />
-        <p className="mt-4 text-secondary-600">Loading TrackFlow...</p>
+        <Loader2 className="h-8 w-8 animate-spin mx-auto text-zinc-900" />
+        <p className="mt-4 text-zinc-600">Loading TrackFlow...</p>
       </div>
     </div>
   );
 }
 
-// Main authenticated app component
-function AuthenticatedApp() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [templates, setTemplates] = useState<Workflow[]>([]);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showNewWorkflowModal, setShowNewWorkflowModal] = useState(false);
-  const isMountedRef = useRef(true);
-  const { showToast } = useToast();
+  // Main app with auth wrapper
+  function AppContent() {
+    const { user, loading } = useAuth();
 
-  // Load data on mount - simple and clean
-  useEffect(() => {
-    const loadData = async () => {
-      if (!isMountedRef.current) return;
+    if (loading) {
+      return <LoadingScreen />;
+    }
 
-      console.log('🚀 Loading app data...');
-      setLoading(true);
-      setError(null);
+    if (!user) {
+      return <Auth />;
+    }
 
+    return <AuthenticatedApp />;
+  }
+
+  // Main authenticated app component
+  function AuthenticatedApp() {
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [workflows, setWorkflows] = useState<Workflow[]>([]);
+    const [templates, setTemplates] = useState<Workflow[]>([]);
+    const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [showNewWorkflowModal, setShowNewWorkflowModal] = useState(false);
+    const isMountedRef = useRef(true);
+    const { showToast } = useToast();
+
+    // Load data on mount - simple and clean
+    useEffect(() => {
+      const loadData = async () => {
+        if (!isMountedRef.current) return;
+
+        console.log('🚀 Loading app data...');
+        setLoading(true);
+        setError(null);
+
+        try {
+          // Load workflows and templates in parallel
+          const [userWorkflows, workflowTemplates] = await Promise.all([
+            WorkflowService.getUserWorkflows(),
+            WorkflowService.getWorkflowTemplates()
+          ]);
+
+          if (isMountedRef.current) {
+            setWorkflows(userWorkflows);
+            setTemplates(workflowTemplates);
+            console.log(`✅ Loaded ${userWorkflows.length} workflows and ${workflowTemplates.length} templates`);
+          }
+        } catch (err: any) {
+          console.error('Error loading data:', err);
+          if (isMountedRef.current) {
+            setError(err.message || 'Failed to load data. Please try refreshing the page.');
+          }
+        } finally {
+          if (isMountedRef.current) {
+            setLoading(false);
+          }
+        }
+      };
+
+      isMountedRef.current = true;
+      loadData();
+
+      return () => {
+        isMountedRef.current = false;
+      };
+    }, []);
+
+    const handleWorkflowSelect = (workflow: Workflow) => {
+      setSelectedWorkflow(workflow);
+    };
+
+    const handleCreateWorkflow = () => {
+      setShowNewWorkflowModal(true);
+    };
+
+    // New handler for modal submission
+    const handleNewWorkflowSubmit = (workflowData: NewWorkflowData) => {
+      const newWorkflow: Workflow = {
+        id: `workflow-${Date.now()}`,
+        name: workflowData.name,
+        description: workflowData.description || `Personalization playbook for ${workflowData.targetUrl}`,
+        isActive: false,
+        status: 'draft',
+        executions: 0,
+        nodes: [],
+        connections: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        targetUrl: workflowData.targetUrl
+      };
+      
+      setWorkflows(prev => [...prev, newWorkflow]);
+      setSelectedWorkflow(newWorkflow);
+      setShowNewWorkflowModal(false);
+      showToast(`Workflow "${workflowData.name}" created successfully`, 'success');
+    };
+
+    const handleWorkflowSave = async (workflow: Workflow) => {
       try {
-        // Load workflows and templates in parallel
-        const [userWorkflows, workflowTemplates] = await Promise.all([
-          WorkflowService.getUserWorkflows(),
-          WorkflowService.getWorkflowTemplates()
-        ]);
-
-        if (isMountedRef.current) {
-          setWorkflows(userWorkflows);
-          setTemplates(workflowTemplates);
-          console.log(`✅ Loaded ${userWorkflows.length} workflows and ${workflowTemplates.length} templates`);
-        }
-      } catch (err: any) {
-        console.error('Error loading data:', err);
-        if (isMountedRef.current) {
-          setError(err.message || 'Failed to load data. Please try refreshing the page.');
-        }
-      } finally {
-        if (isMountedRef.current) {
-          setLoading(false);
-        }
+        console.log(`💾 Saving workflow: ${workflow.name}`);
+        const savedWorkflow = await WorkflowService.saveWorkflow(workflow);
+        
+        setWorkflows(prev => 
+          prev.map(w => w.id === workflow.id ? savedWorkflow : w)
+        );
+        
+        setSelectedWorkflow(savedWorkflow);
+        console.log('✅ Workflow saved successfully');
+        showToast('Workflow saved successfully', 'success');
+        return savedWorkflow;
+      } catch (error: any) {
+        console.error('Error saving workflow:', error);
+        showToast(`Failed to save workflow: ${error.message}`, 'error');
+        throw error;
       }
     };
 
-    isMountedRef.current = true;
-    loadData();
-
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const handleWorkflowSelect = (workflow: Workflow) => {
-    setSelectedWorkflow(workflow);
-  };
-
-  const handleCreateWorkflow = () => {
-    setShowNewWorkflowModal(true);
-  };
-
-  // New handler for modal submission
-  const handleNewWorkflowSubmit = (workflowData: NewWorkflowData) => {
-    const newWorkflow: Workflow = {
-      id: `workflow-${Date.now()}`,
-      name: workflowData.name,
-      description: workflowData.description || `Personalization playbook for ${workflowData.targetUrl}`,
-      isActive: false,
-      status: 'draft',
-      executions: 0,
-      nodes: [],
-      connections: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      targetUrl: workflowData.targetUrl
-    };
-    
-    setWorkflows(prev => [...prev, newWorkflow]);
-    setSelectedWorkflow(newWorkflow);
-    setShowNewWorkflowModal(false);
-    showToast(`Workflow "${workflowData.name}" created successfully`, 'success');
-  };
-
-  const handleWorkflowSave = async (workflow: Workflow) => {
-    try {
-      console.log(`💾 Saving workflow: ${workflow.name}`);
-      const savedWorkflow = await WorkflowService.saveWorkflow(workflow);
-      
-      setWorkflows(prev => 
-        prev.map(w => w.id === workflow.id ? savedWorkflow : w)
-      );
-      
-      setSelectedWorkflow(savedWorkflow);
-      console.log('✅ Workflow saved successfully');
-      showToast('Workflow saved successfully', 'success');
-      return savedWorkflow;
-    } catch (error: any) {
-      console.error('Error saving workflow:', error);
-      showToast(`Failed to save workflow: ${error.message}`, 'error');
-      throw error;
-    }
-  };
-
-  const handleWorkflowDelete = async (workflowId: string) => {
-    try {
-      console.log(`🗑️ Deleting workflow: ${workflowId}`);
-      await WorkflowService.deleteWorkflow(workflowId);
-      
-      setWorkflows(prev => prev.filter(w => w.id !== workflowId));
-      
-      if (selectedWorkflow?.id === workflowId) {
-        setSelectedWorkflow(null);
+    const handleWorkflowDelete = async (workflowId: string) => {
+      try {
+        console.log(`🗑️ Deleting workflow: ${workflowId}`);
+        await WorkflowService.deleteWorkflow(workflowId);
+        
+        setWorkflows(prev => prev.filter(w => w.id !== workflowId));
+        
+        if (selectedWorkflow?.id === workflowId) {
+          setSelectedWorkflow(null);
+        }
+        
+        console.log('✅ Workflow deleted successfully');
+        showToast('Workflow deleted successfully', 'success');
+      } catch (error: any) {
+        console.error('Error deleting workflow:', error);
+        showToast(`Failed to delete workflow: ${error.message}`, 'error');
       }
-      
-      console.log('✅ Workflow deleted successfully');
-      showToast('Workflow deleted successfully', 'success');
-    } catch (error: any) {
-      console.error('Error deleting workflow:', error);
-      showToast(`Failed to delete workflow: ${error.message}`, 'error');
-    }
-  };
+    };
 
-  const renderContent = () => {
+    // Get page title based on active tab
+    const getPageTitle = () => {
+      const pageTitles: { [key: string]: string } = {
+        'dashboard': 'Dashboard',
+        'workflows': 'Playbooks',
+        'analytics': 'Analytics',
+        'templates': 'Templates',
+        'team': 'Team',
+        'settings': 'Settings',
+        'executions': 'Executions',
+        'reports': 'Reports',
+        'api-keys': 'API Keys',
+      };
+      return pageTitles[activeTab] || 'TrackFlow';
+    };
+
     // Show loading state
     if (loading) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-secondary-50">
+        <div className="flex h-screen w-full items-center justify-center bg-white">
           <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary-600" />
-            <p className="mt-4 text-secondary-600">Loading your workflows...</p>
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-zinc-900" />
+            <p className="mt-4 text-zinc-600">Loading your workflows...</p>
           </div>
         </div>
       );
@@ -166,13 +199,13 @@ function AuthenticatedApp() {
     // Show error state
     if (error) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-secondary-50">
+        <div className="flex h-screen w-full items-center justify-center bg-white">
           <div className="text-center">
             <AlertCircle className="h-8 w-8 mx-auto text-red-600" />
             <p className="mt-4 text-red-600">{error}</p>
             <button 
               onClick={() => window.location.reload()} 
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              className="mt-4 px-4 py-2 bg-zinc-900 text-white rounded-md hover:bg-zinc-800"
             >
               Refresh Page
             </button>
@@ -181,7 +214,7 @@ function AuthenticatedApp() {
       );
     }
 
-    // Show workflow builder if a workflow is selected
+    // Show workflow builder (Fullscreen mode)
     if (selectedWorkflow) {
       return (
         <ErrorBoundary>
@@ -194,74 +227,105 @@ function AuthenticatedApp() {
       );
     }
 
-    // Show main content based on active tab
-    switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard workflows={workflows} onCreateWorkflow={handleCreateWorkflow} />;
-      case 'workflows':
-        return (
-          <WorkflowList
-            workflows={workflows}
-            onWorkflowSelect={handleWorkflowSelect}
-            onCreateWorkflow={handleCreateWorkflow}
-            onWorkflowImport={(importedWorkflow) => {
-              setWorkflows(prev => [...prev, importedWorkflow]);
-              showToast(`Workflow "${importedWorkflow.name}" imported successfully`, 'success');
-            }}
-            onWorkflowUpdate={(updatedWorkflow) => {
-              setWorkflows(prev => 
-                prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
-              );
-            }}
-            onWorkflowDelete={handleWorkflowDelete}
-          />
-        );
-      case 'templates':
-        return <Templates templates={templates} onTemplateUse={handleWorkflowSelect} />;
-      case 'analytics':
-        return <Analytics workflows={workflows} />;
-      case 'executions':
-        return <Analytics workflows={workflows} />;
-      case 'settings':
-        return <Settings />;
-      case 'api-keys':
-        return <ApiKeyManager />;
-      default:
-        return <Dashboard workflows={workflows} onCreateWorkflow={handleCreateWorkflow} />;
-    }
-  };
-
-  return (
-    <div className="h-screen bg-secondary-50">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onCreateWorkflow={handleCreateWorkflow} />
-      <div className="ml-64">
-        {renderContent()}
-      </div>
-      
-      {/* New Workflow Modal */}
-      <NewWorkflowModal
-        isOpen={showNewWorkflowModal}
-        onClose={() => setShowNewWorkflowModal(false)}
-        onCreateWorkflow={handleNewWorkflowSubmit}
-      />
-    </div>
-  );
-}
-
-// Main app with auth wrapper
-function AppContent() {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return <LoadingScreen />;
+    // Show main app interface with Sidebar
+    return (
+      <SidebarProvider defaultOpen={true}>
+        <div className="flex h-screen w-full bg-white">
+          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onCreateWorkflow={handleCreateWorkflow} />
+          <SidebarInset className="flex-1 overflow-auto">
+            <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-white px-4">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger />
+                <h1 className="text-base font-normal text-zinc-900">{getPageTitle()}</h1>
+              </div>
+              {(activeTab === 'dashboard' || activeTab === 'workflows') && (
+                <button
+                  onClick={handleCreateWorkflow}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white hover:bg-zinc-800 transition-colors font-medium text-sm rounded-md shadow-sm"
+                >
+                  <Plus className="size-4" />
+                  {activeTab === 'dashboard' ? 'Create Workflow' : 'New Playbook'}
+                </button>
+              )}
+            </header>
+            
+            {/* Content Area */}
+            {(() => {
+              switch (activeTab) {
+                case 'dashboard':
+                  return (
+                    <Dashboard 
+                      workflows={workflows} 
+                      onCreateWorkflow={handleCreateWorkflow}
+                      onWorkflowSelect={handleWorkflowSelect}
+                      onWorkflowUpdate={(updatedWorkflow) => {
+                        setWorkflows(prev => 
+                          prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
+                        );
+                      }}
+                      onWorkflowDelete={handleWorkflowDelete}
+                      onViewAllWorkflows={() => setActiveTab('workflows')}
+                    />
+                  );
+                case 'workflows':
+                  return (
+                    <WorkflowList
+                      workflows={workflows}
+                      onWorkflowSelect={handleWorkflowSelect}
+                      onCreateWorkflow={handleCreateWorkflow}
+                      onWorkflowImport={(importedWorkflow) => {
+                        setWorkflows(prev => [...prev, importedWorkflow]);
+                        showToast(`Workflow "${importedWorkflow.name}" imported successfully`, 'success');
+                      }}
+                      onWorkflowUpdate={(updatedWorkflow) => {
+                        setWorkflows(prev => 
+                          prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
+                        );
+                      }}
+                      onWorkflowDelete={handleWorkflowDelete}
+                    />
+                  );
+                case 'templates':
+                  return <Templates templates={templates} onTemplateUse={handleWorkflowSelect} />;
+                case 'analytics':
+                  return <Analytics workflows={workflows} />;
+                case 'executions':
+                  return <Executions workflows={workflows} />;
+                case 'reports':
+                  return <Reports workflows={workflows} />;
+                case 'settings':
+                  return <Settings />;
+                case 'api-keys':
+                  return <ApiKeyManager />;
+                default:
+                  return (
+                    <Dashboard 
+                      workflows={workflows} 
+                      onCreateWorkflow={handleCreateWorkflow}
+                      onWorkflowSelect={handleWorkflowSelect}
+                      onWorkflowUpdate={(updatedWorkflow) => {
+                        setWorkflows(prev => 
+                          prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
+                        );
+                      }}
+                      onWorkflowDelete={handleWorkflowDelete}
+                      onViewAllWorkflows={() => setActiveTab('workflows')}
+                    />
+                  );
+              }
+            })()}
+          </SidebarInset>
+        </div>
+        
+        {/* New Workflow Modal */}
+        <NewWorkflowModal
+          isOpen={showNewWorkflowModal}
+          onClose={() => setShowNewWorkflowModal(false)}
+          onCreateWorkflow={handleNewWorkflowSubmit}
+        />
+      </SidebarProvider>
+    );
   }
-
-  if (!user) {
-    return <Auth />;
-  }
-
-  return <AuthenticatedApp />;
-}
 
 // Root app component
 function App() {

@@ -1,28 +1,27 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   Activity, 
-  CheckCircle, 
-  Clock, 
-  TrendingUp, 
-  AlertCircle,
   Globe,
-  Zap,
-  Target,
   BarChart3,
-  PieChart,
-  Eye,
-  MousePointer,
-  Timer,
-  Users,
-  ExternalLink,
-  FileText,
-  Play,
-  Pause,
-  Edit,
-  XCircle
+  TrendingUp
 } from 'lucide-react';
 import { Workflow } from '../types/workflow';
 import * as Icons from 'lucide-react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Rectangle, XAxis, YAxis } from 'recharts';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { apiClient } from '@/lib/apiClient';
 
 interface AnalyticsProps {
   workflows: Workflow[];
@@ -51,6 +50,35 @@ interface URLStats {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
+  const [timeRange, setTimeRange] = useState('30d');
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [timeseriesData, setTimeseriesData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+      try {
+        const [statsRes, seriesRes] = await Promise.all([
+          apiClient.getAnalyticsDashboard(days),
+          apiClient.getAnalyticsTimeseries(days)
+        ]);
+        
+        if (statsRes.success && statsRes.data?.stats) {
+            setDashboardStats(statsRes.data.stats);
+        }
+        if (seriesRes.success && seriesRes.data?.data) {
+            setTimeseriesData(seriesRes.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch analytics:', err);
+      }
+    };
+    
+    fetchStats();
+  }, [timeRange]);
+  
+  // Shades of main blue (#3B82F6) - darkest to lightest
+  const barColors = ['#3B82F6', '#2563EB', '#1D4ED8', '#60A5FA', '#93C5FD'];
   
   // Calculate analytics metrics from workflow data
   const analytics = useMemo(() => {
@@ -61,7 +89,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
     const draftPlaybooks = workflows.filter(w => w.status === 'draft').length;
     const errorPlaybooks = workflows.filter(w => w.status === 'error').length;
     
-    const totalExecutions = workflows.reduce((sum, w) => sum + w.executions, 0);
+    // Use dashboard stats if available, otherwise fallback
+    const totalExecutions = dashboardStats?.totalEvents || workflows.reduce((sum, w) => sum + w.executions, 0);
     const avgExecutionsPerPlaybook = totalPlaybooks > 0 ? Math.round(totalExecutions / totalPlaybooks) : 0;
 
     // URL-based grouping
@@ -76,7 +105,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
     }, {} as Record<string, Workflow[]>);
     
     Object.entries(urlGroups).forEach(([url, urlWorkflows]) => {
-      const totalExecutions = urlWorkflows.reduce((sum, w) => sum + w.executions, 0);
+      const groupExecutions = urlWorkflows.reduce((sum, w) => sum + w.executions, 0);
       const activeCount = urlWorkflows.filter(w => w.status === 'active').length;
       const avgComplexity = urlWorkflows.length > 0 
         ? urlWorkflows.reduce((sum, w) => sum + w.nodes.length, 0) / urlWorkflows.length
@@ -91,7 +120,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
       urlStats.push({
         url,
         playbookCount: urlWorkflows.length,
-        totalExecutions,
+        totalExecutions: groupExecutions,
         activeCount,
         lastActivity,
         avgComplexity: Math.round(avgComplexity)
@@ -152,8 +181,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
     const complexPlaybooks = workflows.filter(w => w.nodes.length > 7).length;
     
     return {
-      totalPlaybooks,
-      activePlaybooks,
+      totalPlaybooks: dashboardStats?.totalPlaybooks || totalPlaybooks,
+      activePlaybooks: dashboardStats?.activePlaybooks || activePlaybooks,
       pausedPlaybooks,
       draftPlaybooks,
       errorPlaybooks,
@@ -171,14 +200,67 @@ const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
       totalActions,
       uniqueUrls: urlStats.length
     };
-  }, [workflows]);
+  }, [workflows, dashboardStats]);
+
+  // Generate chart data based on workflow creation dates and executions
+  const chartData = useMemo(() => {
+    if (timeseriesData.length > 0) {
+        return timeseriesData.map((d: any) => ({
+            date: d.date,
+            active: 0, // We could fetch active count history but simplified for now
+            executions: parseInt(d.events || 0)
+        }));
+    }
+
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+    const data: { date: string; active: number; executions: number }[] = [];
+    const now = new Date();
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Count workflows created on or before this date and active
+      const activeCount = workflows.filter(w => {
+        const createdDate = new Date(w.createdAt);
+        return createdDate <= date && w.status === 'active';
+      }).length;
+      
+      // Simulate executions (fallback)
+      const executionsCount = workflows.filter(w => {
+        if (!w.lastRun) return false;
+        const lastRunDate = new Date(w.lastRun);
+        return lastRunDate.toISOString().split('T')[0] === dateStr;
+      }).reduce((sum, w) => sum + Math.floor(w.executions / 30), 0);
+      
+      data.push({
+        date: dateStr,
+        active: activeCount,
+        executions: executionsCount
+      });
+    }
+    
+    return data;
+  }, [workflows, timeRange, timeseriesData]);
+
+  const chartConfig = {
+    active: {
+      label: 'Active Playbooks',
+      color: '#3b82f6',
+    },
+    executions: {
+      label: 'Daily Executions',
+      color: '#60a5fa',
+    },
+  } satisfies ChartConfig;
 
   // Helper function to get icon component
-  const getIconComponent = (iconName: string, className: string = "w-4 h-4") => {
+  const getIconComponent = (iconName: string, className: string = "size-4") => {
     const IconComponent = Icons[iconName as keyof typeof Icons] as React.ComponentType<{ className?: string }>;
     if (IconComponent) {
       return <IconComponent className={className} />;
-      }
+    }
     return <Activity className={className} />;
   };
 
@@ -197,392 +279,410 @@ const Analytics: React.FC<AnalyticsProps> = ({ workflows }) => {
     return 'Just now';
   };
 
-  // Status distribution for pie chart
-  const statusDistribution = [
-    { status: 'active', count: analytics.activePlaybooks, color: 'bg-green-500' },
-    { status: 'paused', count: analytics.pausedPlaybooks, color: 'bg-yellow-500' },
-    { status: 'draft', count: analytics.draftPlaybooks, color: 'bg-gray-500' },
-    { status: 'error', count: analytics.errorPlaybooks, color: 'bg-red-500' }
-  ].filter(item => item.count > 0);
+  const getStatusDotColor = (status: string) => {
+    const colors: Record<string, string> = {
+      active: 'bg-green-500',
+      paused: 'bg-amber-500',
+      draft: 'bg-zinc-400',
+      error: 'bg-rose-500'
+    };
+    return colors[status] || colors.draft;
+  };
 
   return (
-    <div className="flex-1 bg-secondary-50">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="px-8 py-6 pt-12">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
+    <div className="flex-1 bg-white">
+      <div className="max-w-[1600px] mx-auto px-6 py-6">
+        {/* Stats Grid - Compact & Minimal */}
+        <div className="grid grid-cols-4 gap-px bg-zinc-200 border border-zinc-200 rounded-md mb-6 overflow-hidden">
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Playbooks</span>
+            </div>
+            <div className="text-3xl font-light mb-1">{analytics.totalPlaybooks}</div>
+            <div className="text-xs text-zinc-500">{analytics.activePlaybooks} active</div>
+          </div>
+
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Activity className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Executions</span>
+            </div>
+            <div className="text-3xl font-light mb-1">{analytics.totalExecutions.toLocaleString()}</div>
+            <div className="text-xs text-zinc-500">{analytics.avgExecutionsPerPlaybook} avg</div>
+          </div>
+
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Globe className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">URLs</span>
+            </div>
+            <div className="text-3xl font-light mb-1">{analytics.uniqueUrls}</div>
+            <div className="text-xs text-zinc-500">target domains</div>
+          </div>
+
+          <div className="bg-white p-6 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="size-4 text-zinc-400" />
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">Complexity</span>
+            </div>
+            <div className="text-3xl font-light mb-1">{analytics.avgComplexity}</div>
+            <div className="text-xs text-zinc-500">nodes avg</div>
+          </div>
+        </div>
+
+        {/* Activity Chart */}
+        <div className="mb-6 border border-zinc-200 bg-white rounded-md overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
             <div>
-                <h1 className="text-3xl font-medium text-secondary-900 tracking-tight">Analytics Dashboard</h1>
-                <p className="text-sm text-secondary-600">Operational insights and performance metrics for your playbooks</p>
+              <h2 className="text-sm font-medium mb-0.5">Playbook Activity</h2>
+              <p className="text-xs text-zinc-500">Active playbooks and executions over time</p>
             </div>
-            </div>
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="w-[140px] h-8 text-xs border-zinc-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-zinc-200">
+                <SelectItem value="7d" className="text-xs">Last 7 days</SelectItem>
+                <SelectItem value="30d" className="text-xs">Last 30 days</SelectItem>
+                <SelectItem value="90d" className="text-xs">Last 90 days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="px-6 py-6">
+            <ChartContainer config={chartConfig} className="h-[200px] w-full">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="fillActive" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="fillExecutions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={32}
+                  tick={{ fontSize: 11, fill: '#71717a' }}
+                  tickFormatter={(value) => {
+                    const date = new Date(value);
+                    return date.toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    });
+                  }}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      className="border-zinc-200"
+                      labelFormatter={(value) => {
+                        return new Date(value).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        });
+                      }}
+                      indicator="line"
+                    />
+                  }
+                />
+                <Area
+                  dataKey="active"
+                  type="monotone"
+                  fill="url(#fillActive)"
+                  stroke="#3b82f6"
+                  strokeWidth={1.5}
+                />
+                <Area
+                  dataKey="executions"
+                  type="monotone"
+                  fill="url(#fillExecutions)"
+                  stroke="#60a5fa"
+                  strokeWidth={1.5}
+                />
+              </AreaChart>
+            </ChartContainer>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="px-8 pb-8">
-                    {/* Account Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white p-6 rounded-lg border border-secondary-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-50 rounded-lg">
-                  <Activity className="w-6 h-6 text-primary-600" />
-                </div>
-                <span className="text-sm font-medium text-green-600">
-                  {analytics.activePlaybooks} active
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-secondary-900 tracking-tight mb-1">{analytics.totalPlaybooks}</h3>
-              <p className="text-sm text-secondary-600">Total Playbooks</p>
+        {/* Triggers & Actions */}
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          {/* Triggers */}
+          <div className="border border-zinc-200 bg-white rounded-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100">
+              <h2 className="text-sm font-medium mb-0.5">Triggers</h2>
+              <p className="text-xs text-zinc-500">Most used trigger types</p>
             </div>
-
-            <div className="bg-white p-6 rounded-lg border border-secondary-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-50 rounded-lg">
-                  <Target className="w-6 h-6 text-primary-600" />
+            {analytics.triggerStats.length > 0 ? (
+              <>
+                <div className="px-6 py-6">
+                  <ChartContainer 
+                    config={{
+                      count: {
+                        label: "Triggers",
+                        color: '#3b82f6',
+                      },
+                      ...analytics.triggerStats.slice(0, 5).reduce((acc, trigger) => {
+                        acc[trigger.category] = {
+                          label: trigger.category,
+                          color: '#3b82f6',
+                        };
+                        return acc;
+                      }, {} as Record<string, { label: string; color: string }>),
+                    } satisfies ChartConfig}
+                    className="h-[240px] w-full"
+                  >
+                    <BarChart
+                      accessibilityLayer
+                      data={analytics.triggerStats.slice(0, 5).map((trigger) => ({
+                        category: trigger.category,
+                        count: trigger.count,
+                      }))}
+                      layout="vertical"
+                      margin={{
+                        right: 16,
+                      }}
+                    >
+                      <CartesianGrid horizontal={false} stroke="#e4e4e7" />
+                      <YAxis
+                        dataKey="category"
+                        type="category"
+                        tickLine={false}
+                        tickMargin={10}
+                        axisLine={false}
+                        tickFormatter={(value) => value.slice(0, 3)}
+                        hide
+                      />
+                      <XAxis dataKey="count" type="number" hide />
+                      <ChartTooltip
+                        cursor={false}
+                        content={<ChartTooltipContent indicator="line" className="border-zinc-200" />}
+                      />
+                      <Bar
+                        dataKey="count"
+                        layout="vertical"
+                        radius={4}
+                        fill="#3B82F6"
+                      >
+                        <LabelList
+                          dataKey="category"
+                          position="insideLeft"
+                          offset={8}
+                          className="fill-white"
+                          fontSize={12}
+                        />
+                        <LabelList
+                          dataKey="count"
+                          position="right"
+                          offset={8}
+                          className="fill-foreground"
+                          fontSize={12}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ChartContainer>
                 </div>
-                <span className="text-sm font-medium text-secondary-500">
-                  {analytics.avgExecutionsPerPlaybook} avg
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-secondary-900 tracking-tight mb-1">{analytics.totalExecutions.toLocaleString()}</h3>
-              <p className="text-sm text-secondary-600">Total Executions</p>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg border border-secondary-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-50 rounded-lg">
-                  <Globe className="w-6 h-6 text-primary-600" />
+                <div className="px-6 py-4 border-t border-zinc-100 flex flex-col gap-2 text-xs">
+                  <div className="flex gap-2 leading-none font-medium text-zinc-700">
+                    {analytics.triggerStats[0] && (
+                      <>
+                        Trending up by {analytics.triggerStats[0].percentage}% <TrendingUp className="h-4 w-4" />
+                      </>
+                    )}
+                  </div>
+                  <div className="text-zinc-500 leading-none">
+                    Showing total triggers for the last {analytics.triggerStats.length} categories
+                  </div>
                 </div>
-                <span className="text-sm font-medium text-secondary-500">
-                  coverage
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-secondary-900 tracking-tight mb-1">{analytics.uniqueUrls}</h3>
-              <p className="text-sm text-secondary-600">Target URLs</p>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg border border-secondary-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-50 rounded-lg">
-                  <BarChart3 className="w-6 h-6 text-primary-600" />
-                </div>
-                <span className="text-sm font-medium text-secondary-500">
-                  nodes/playbook
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-secondary-900 tracking-tight mb-1">{analytics.avgComplexity}</h3>
-              <p className="text-sm text-secondary-600">Avg Complexity</p>
-            </div>
+              </>
+            ) : (
+              <div className="py-12 text-center text-sm text-zinc-400">No triggers configured</div>
+            )}
           </div>
 
-          {/* URL Performance */}
-                  <div className="bg-white rounded-lg border border-secondary-200 overflow-hidden mb-8">
-                    <div className="px-6 py-4 border-b border-secondary-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                  <h3 className="text-lg font-semibold text-secondary-900">URL Performance</h3>
-                  <p className="text-sm text-secondary-600 mt-1">Playbook performance grouped by target URLs</p>
+          {/* Actions */}
+          <div className="border border-zinc-200 bg-white rounded-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100">
+              <h2 className="text-sm font-medium mb-0.5">Actions</h2>
+              <p className="text-xs text-zinc-500">Most used action types</p>
+            </div>
+            {analytics.actionStats.length > 0 ? (
+              <div className="px-6 py-6">
+                <ChartContainer 
+                  config={{
+                    count: {
+                      label: "Actions",
+                      color: '#3b82f6',
+                    },
+                    ...analytics.actionStats.slice(0, 5).reduce((acc, action, index) => {
+                      acc[action.nodeType] = {
+                        label: action.nodeType,
+                        color: barColors[index % barColors.length],
+                      };
+                      return acc;
+                    }, {} as Record<string, { label: string; color: string }>),
+                  } satisfies ChartConfig}
+                  className="h-[240px] w-full"
+                >
+                  <BarChart 
+                    accessibilityLayer 
+                    data={analytics.actionStats.slice(0, 5).map((action, index) => ({
+                      nodeType: action.nodeType,
+                      count: action.count,
+                      fill: barColors[index % barColors.length],
+                    }))}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                    <XAxis
+                      dataKey="nodeType"
+                      tickLine={false}
+                      tickMargin={10}
+                      axisLine={false}
+                      tick={{ fontSize: 11, fill: '#71717a' }}
+                      tickFormatter={(value) => value}
+                    />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent hideLabel className="border-zinc-200" />}
+                    />
+                    <Bar
+                      dataKey="count"
+                      strokeWidth={2}
+                      radius={8}
+                      activeIndex={0}
+                      activeBar={({ ...props }) => {
+                        return (
+                          <Rectangle
+                            {...props}
+                            fillOpacity={0.8}
+                            stroke={props.payload.fill}
+                            strokeDasharray={4}
+                            strokeDashoffset={4}
+                          />
+                        )
+                      }}
+                    />
+                  </BarChart>
+                </ChartContainer>
+                <div className="flex flex-col gap-2 text-xs mt-4 pt-4 border-t border-zinc-100">
+                  <div className="flex gap-2 leading-none font-medium text-zinc-700">
+                    {analytics.actionStats[0] && (
+                      <>
+                        {analytics.actionStats[0].nodeType} is most popular at {analytics.actionStats[0].percentage}%
+                      </>
+                    )}
+                  </div>
+                  <div className="text-zinc-500 leading-none">
+                    {analytics.totalActions} total actions across all playbooks
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-sm text-zinc-400">No actions configured</div>
+            )}
+          </div>
+        </div>
+
+        {/* URL Performance */}
+        {analytics.urlStats.length > 0 && (
+          <div className="mb-6">
+            <div className="mb-4">
+              <h2 className="text-sm font-medium mb-1">URL Performance</h2>
+              <p className="text-xs text-zinc-500">{analytics.urlStats.length} unique target URLs</p>
+            </div>
+            <div className="border border-zinc-200 rounded-md overflow-hidden">
+              <div className="grid grid-cols-6 gap-4 px-4 py-3 bg-zinc-50 text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-200">
+                <div className="col-span-2">URL</div>
+                <div>Playbooks</div>
+                <div>Active</div>
+                <div>Executions</div>
+                <div>Last Active</div>
+              </div>
+              {analytics.urlStats.slice(0, 10).map((urlStat, index) => (
+                <div key={index} className="grid grid-cols-6 gap-4 px-4 py-3 text-sm border-b border-zinc-100 last:border-0 hover:bg-zinc-50 transition-colors items-center">
+                  <div className="col-span-2 flex items-center gap-2 truncate">
+                    <Globe className="size-4 text-zinc-400 flex-shrink-0" />
+                    <span className="truncate">{urlStat.url}</span>
+                  </div>
+                  <div className="flex items-center text-zinc-600">{urlStat.playbookCount}</div>
+                  <div className="flex items-center text-zinc-600">{urlStat.activeCount}</div>
+                  <div className="flex items-center font-medium">{urlStat.totalExecutions.toLocaleString()}</div>
+                  <div className="flex items-center text-zinc-500 text-xs">
+                    {urlStat.lastActivity ? formatTimeAgo(urlStat.lastActivity) : 'Never'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* All Playbooks */}
+        {workflows.length > 0 && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-medium mb-1">All Playbooks</h2>
+              <p className="text-xs text-zinc-500">{workflows.length} total playbooks</p>
+            </div>
+            <div className="border border-zinc-200 rounded-md overflow-hidden">
+              <div className="grid grid-cols-7 gap-4 px-4 py-3 bg-zinc-50 text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-200">
+                <div className="col-span-2">Name</div>
+                <div>Status</div>
+                <div>URL</div>
+                <div>Executions</div>
+                <div>Nodes</div>
+                <div>Last Run</div>
+              </div>
+              {workflows
+                .sort((a, b) => b.executions - a.executions)
+                .map((workflow) => {
+                  const triggerNode = workflow.nodes.find(node => node.type === 'trigger');
+                  return (
+                    <div key={workflow.id} className="grid grid-cols-7 gap-4 px-4 py-3 text-sm border-b border-zinc-100 last:border-0 hover:bg-zinc-50 transition-colors items-center">
+                      <div className="col-span-2 flex items-center gap-2 min-w-0">
+                        {triggerNode ? getIconComponent(triggerNode.icon, "size-4 text-zinc-700 flex-shrink-0") : <Activity className="size-4 text-zinc-700 flex-shrink-0" />}
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{workflow.name}</div>
+                          <div className="text-xs text-zinc-500 truncate">{workflow.description}</div>
                         </div>
-                <span className="text-sm text-secondary-500">{analytics.urlStats.length} URLs</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-2 h-2 rounded-full ${getStatusDotColor(workflow.status)}`} title={workflow.status}></div>
+                      </div>
+                      <div className="flex items-center truncate text-zinc-600 text-xs">
+                        {workflow.targetUrl ? new URL(workflow.targetUrl).hostname : 'Not set'}
+                      </div>
+                      <div className="flex items-center font-medium">{workflow.executions.toLocaleString()}</div>
+                      <div className="flex items-center text-zinc-600">{workflow.nodes.length}</div>
+                      <div className="flex items-center text-zinc-500 text-xs">
+                        {workflow.lastRun ? formatTimeAgo(workflow.lastRun) : 'Never'}
                       </div>
                     </div>
-                    
-            {analytics.urlStats.length > 0 ? (
-                      <div className="divide-y divide-secondary-200">
-                {analytics.urlStats.map((urlStat, index) => (
-                          <div key={index} className="p-6 hover:bg-secondary-50">
-                    <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3 mb-2">
-                                  <Globe className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                                  <div>
-                                    <h4 className="text-sm font-medium text-secondary-900">
-                              {urlStat.url}
-                                    </h4>
-                                    <p className="text-xs text-secondary-500">
-                              {urlStat.playbookCount} playbook{urlStat.playbookCount !== 1 ? 's' : ''} • 
-                              {urlStat.activeCount} active • 
-                              Avg {urlStat.avgComplexity} nodes
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm font-medium text-secondary-900">
-                          {urlStat.totalExecutions.toLocaleString()} executions
-                                </div>
-                        {urlStat.lastActivity && (
-                                <div className="text-xs text-secondary-500">
-                            Last: {formatTimeAgo(urlStat.lastActivity)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                                 ) : (
-               <div className="text-center py-16">
-                 <div className="p-4 bg-secondary-100 rounded-lg w-fit mx-auto mb-4">
-                   <Globe className="w-8 h-8 text-secondary-400" />
-                 </div>
-                 <h4 className="text-lg font-medium text-secondary-900 mb-2">No Target URLs</h4>
-                 <p className="text-secondary-600 max-w-sm mx-auto">Configure target URLs for your playbooks to see URL-based performance analytics.</p>
-               </div>
-             )}
-                  </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
-          {/* Analysis Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                         {/* Trigger Analysis */}
-             <div className="bg-white rounded-lg border border-secondary-200 p-6">
-               <h3 className="text-lg font-semibold text-secondary-900 mb-4 flex items-center">
-                 <Zap className="w-5 h-5 mr-2" />
-                 Trigger Categories
-               </h3>
-               {analytics.triggerStats.length > 0 ? (
-                 <div className="space-y-3">
-                   {analytics.triggerStats.map((trigger, index) => (
-                     <div key={index} className="flex items-center justify-between p-3 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors">
-                       <div className="flex items-center">
-                         <div className="p-2 bg-primary-50 rounded-lg mr-3">
-                           {getIconComponent(trigger.icon, "w-4 h-4 text-primary-600")}
-                         </div>
-                         <span className="text-sm font-medium text-secondary-900">{trigger.category}</span>
-                       </div>
-                       <div className="flex items-center space-x-2">
-                         <span className="text-lg font-bold text-secondary-900">{trigger.count}</span>
-                         <span className="text-xs text-secondary-500 bg-secondary-100 px-2 py-1 rounded-full">
-                           {trigger.percentage}%
-                         </span>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <div className="text-center py-8">
-                   <div className="p-3 bg-secondary-100 rounded-lg w-fit mx-auto mb-3">
-                     <Zap className="w-6 h-6 text-secondary-400" />
-                   </div>
-                   <p className="text-secondary-500">No triggers configured yet</p>
-                 </div>
-               )}
-             </div>
-
-             {/* Action Analysis */}
-             <div className="bg-white rounded-lg border border-secondary-200 p-6">
-               <h3 className="text-lg font-semibold text-secondary-900 mb-4 flex items-center">
-                 <MousePointer className="w-5 h-5 mr-2" />
-                 Action Categories
-               </h3>
-               {analytics.actionStats.length > 0 ? (
-                 <div className="space-y-3">
-                   {analytics.actionStats.map((action, index) => (
-                     <div key={index} className="flex items-center justify-between p-3 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors">
-                       <div className="flex items-center">
-                         <div className="p-2 bg-primary-50 rounded-lg mr-3">
-                           <Target className="w-4 h-4 text-primary-600" />
-                         </div>
-                         <span className="text-sm font-medium text-secondary-900">{action.nodeType}</span>
-                       </div>
-                       <div className="flex items-center space-x-2">
-                         <span className="text-lg font-bold text-secondary-900">{action.count}</span>
-                         <span className="text-xs text-secondary-500 bg-secondary-100 px-2 py-1 rounded-full">
-                           {action.percentage}%
-                         </span>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <div className="text-center py-8">
-                   <div className="p-3 bg-secondary-100 rounded-lg w-fit mx-auto mb-3">
-                     <MousePointer className="w-6 h-6 text-secondary-400" />
-                   </div>
-                   <p className="text-secondary-500">No actions configured yet</p>
-                 </div>
-               )}
-             </div>
-                  </div>
-                  
-          {/* Status Distribution & Lifecycle Analysis */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                         {/* Status Distribution */}
-             <div className="bg-white rounded-lg border border-secondary-200 p-6">
-               <h3 className="text-lg font-semibold text-secondary-900 mb-4 flex items-center">
-                 <PieChart className="w-5 h-5 mr-2" />
-                 Playbook Status
-               </h3>
-               {statusDistribution.length > 0 ? (
-                 <div className="space-y-3">
-                   {statusDistribution.map((item, index) => (
-                     <div key={index} className="flex items-center justify-between p-3 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors">
-                       <div className="flex items-center">
-                         <div className={`w-4 h-4 rounded-full ${item.color} mr-3`}></div>
-                         <span className="text-sm font-medium text-secondary-900 capitalize">{item.status}</span>
-                       </div>
-                       <div className="flex items-center space-x-2">
-                         <span className="text-lg font-bold text-secondary-900">{item.count}</span>
-                         <span className="text-xs text-secondary-500 bg-secondary-100 px-2 py-1 rounded-full">
-                           {Math.round((item.count / analytics.totalPlaybooks) * 100)}%
-                         </span>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <div className="text-center py-8">
-                   <div className="p-3 bg-secondary-100 rounded-lg w-fit mx-auto mb-3">
-                     <PieChart className="w-6 h-6 text-secondary-400" />
-                   </div>
-                   <p className="text-secondary-500">No playbooks created yet</p>
-                 </div>
-               )}
-             </div>
-
-                         {/* Lifecycle Analysis */}
-             <div className="bg-white rounded-lg border border-secondary-200 p-6">
-               <h3 className="text-lg font-semibold text-secondary-900 mb-4 flex items-center">
-                 <Clock className="w-5 h-5 mr-2" />
-                 Creation Timeline
-               </h3>
-               <div className="space-y-3">
-                 <div className="flex items-center justify-between p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors">
-                   <div className="flex items-center">
-                     <div className="p-2 bg-primary-50 rounded-lg mr-3">
-                       <Clock className="w-4 h-4 text-primary-600" />
-                     </div>
-                     <span className="text-sm font-medium text-secondary-900">Last 7 Days</span>
-                   </div>
-                   <span className="text-lg font-bold text-secondary-900">{analytics.ageAnalysis.lastWeek}</span>
-                 </div>
-                 
-                 <div className="flex items-center justify-between p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors">
-                   <div className="flex items-center">
-                     <div className="p-2 bg-primary-50 rounded-lg mr-3">
-                       <Timer className="w-4 h-4 text-primary-600" />
-                     </div>
-                     <span className="text-sm font-medium text-secondary-900">Last 30 Days</span>
-                   </div>
-                   <span className="text-lg font-bold text-secondary-900">{analytics.ageAnalysis.lastMonth}</span>
-                 </div>
-                 
-                 <div className="flex items-center justify-between p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors">
-                   <div className="flex items-center">
-                     <div className="p-2 bg-primary-50 rounded-lg mr-3">
-                       <Users className="w-4 h-4 text-primary-600" />
-                     </div>
-                     <span className="text-sm font-medium text-secondary-900">Older</span>
-                   </div>
-                   <span className="text-lg font-bold text-secondary-900">{analytics.ageAnalysis.older}</span>
-                 </div>
-               </div>
-             </div>
-                                </div>
-                                
-          {/* Playbook Performance Table */}
-                <div className="bg-white rounded-lg border border-secondary-200 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-secondary-200">
-              <h3 className="text-lg font-semibold text-secondary-900">Individual Playbook Performance</h3>
-              <p className="text-sm text-secondary-600 mt-1">Detailed breakdown of each playbook's operational metrics</p>
-                  </div>
-                  
-            {workflows.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-secondary-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Playbook
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Status
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Target URL
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Executions
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Complexity
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Last Run
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                        Age
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-secondary-200">
-                    {workflows
-                      .sort((a, b) => b.executions - a.executions)
-                      .map((workflow) => {
-                        const triggerNode = workflow.nodes.find(node => node.type === 'trigger');
-                            return (
-                          <tr key={workflow.id} className="hover:bg-secondary-50">
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center mr-3 shadow-sm">
-                                  {triggerNode ? getIconComponent(triggerNode.icon, "w-5 h-5 text-white") : <Activity className="w-5 h-5 text-white" />}
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-secondary-900">{workflow.name}</div>
-                                  <div className="text-xs text-secondary-500 truncate max-w-40">{workflow.description}</div>
-                                </div>
-                              </div>
-                            </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                workflow.status === 'active' ? 'bg-green-100 text-green-800' :
-                                workflow.status === 'paused' ? 'bg-yellow-100 text-yellow-800' :
-                                workflow.status === 'draft' ? 'bg-gray-100 text-gray-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {workflow.status}
-                              </span>
-                                </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
-                                  <div className="flex items-center">
-                                <ExternalLink className="w-3 h-3 text-secondary-400 mr-1" />
-                                {workflow.targetUrl || 'Not set'}
-                                  </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
-                              {workflow.executions.toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
-                              {workflow.nodes.length} nodes
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-600">
-                              {workflow.lastRun ? formatTimeAgo(workflow.lastRun) : 'Never'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-600">
-                              {formatTimeAgo(workflow.createdAt)}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                         ) : (
-               <div className="text-center py-16">
-                 <div className="p-4 bg-secondary-100 rounded-lg w-fit mx-auto mb-4">
-                   <FileText className="w-8 h-8 text-secondary-400" />
-                 </div>
-                 <h4 className="text-lg font-medium text-secondary-900 mb-2">No Playbooks Found</h4>
-                 <p className="text-secondary-600 max-w-sm mx-auto">Create your first playbook to see detailed analytics and performance metrics here.</p>
-               </div>
-             )}
-                          </div>
-        </div>
+        {workflows.length === 0 && (
+          <div className="py-20 text-center border border-zinc-200 rounded-md bg-white">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-zinc-100 flex items-center justify-center">
+              <BarChart3 className="size-6 text-zinc-400" />
+            </div>
+            <h3 className="text-sm font-medium mb-1">No playbooks yet</h3>
+            <p className="text-xs text-zinc-500">Create your first playbook to see analytics</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default Analytics; 
+export default Analytics;

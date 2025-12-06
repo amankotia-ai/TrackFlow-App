@@ -24,7 +24,7 @@ export class ApiError extends Error {
   }
 }
 
-class ApiClient {
+export class ApiClient {
   private readonly baseTimeout = 15000; // 15 seconds
   private readonly maxRetries = 2;
   
@@ -590,6 +590,22 @@ class ApiClient {
         timestamp: new Date().toISOString(),
       };
     }
+  }
+
+  /**
+   * Get analytics dashboard stats from backend (ClickHouse)
+   */
+  async getAnalyticsDashboard(days: number = 30): Promise<ApiResponse> {
+    const endpoint = import.meta.env.VITE_API_ENDPOINT || 'http://localhost:3001';
+    return this.makeRequest(`${endpoint}/api/analytics/dashboard?days=${days}`);
+  }
+
+  /**
+   * Get timeseries data for charts (ClickHouse)
+   */
+  async getAnalyticsTimeseries(days: number = 30): Promise<ApiResponse> {
+    const endpoint = import.meta.env.VITE_API_ENDPOINT || 'http://localhost:3001';
+    return this.makeRequest(`${endpoint}/api/analytics/timeseries?days=${days}`);
   }
   
   /**
@@ -1358,64 +1374,6 @@ class ApiClient {
     }
   }
   
-  /**
-   * Scrape website content
-   */
-  async scrapeWebsite(url: string): Promise<ApiResponse> {
-    try {
-      const apiUrl = window.location.hostname === 'localhost' 
-        ? 'http://localhost:3001/api/scrape'
-        : 'https://trackflow-app-production.up.railway.app/api/scrape';
-      
-      const data = await this.requestWithRetry(apiUrl, {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-      });
-      
-      return {
-        success: true,
-        data,
-        timestamp: new Date().toISOString(),
-      };
-      
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message || 'Failed to scrape website',
-        timestamp: new Date().toISOString(),
-      };
-    }
-  }
-
-  /**
-   * Scrape website with hierarchical DOM structure
-   */
-  async scrapeWebsiteHierarchical(url: string): Promise<ApiResponse> {
-    try {
-      const apiUrl = window.location.hostname === 'localhost' 
-        ? 'http://localhost:3001/api/hierarchical-scrape'
-        : 'https://trackflow-app-production.up.railway.app/api/hierarchical-scrape';
-      
-      const data = await this.requestWithRetry(apiUrl, {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-      }, 30000); // Longer timeout for hierarchical scraping
-      
-      return {
-        success: true,
-        data,
-        timestamp: new Date().toISOString(),
-      };
-      
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Failed to scrape website hierarchically',
-        timestamp: new Date().toISOString(),
-      };
-    }
-  }
-
   /**
    * Get user's API keys
    */

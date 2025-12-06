@@ -87,7 +87,7 @@ export function optimizeSelectorForExecution(
     }
   }
   
-  // Strategy 4: Enhanced selector strategies (from scraping)
+  // Strategy 4: Enhanced selector strategies
   if (!bestSelector && elementData.selectorStrategies?.length > 0) {
     const uniqueStrategy = elementData.selectorStrategies.find((s: any) => s.isUnique);
     const bestStrategy = uniqueStrategy || elementData.selectorStrategies[0];

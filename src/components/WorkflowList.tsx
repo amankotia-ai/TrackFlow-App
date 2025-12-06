@@ -1,21 +1,20 @@
 import React, { useState } from 'react';
 import { 
-  Plus, 
   Play, 
   Pause, 
-  Edit, 
   Activity, 
   MoreHorizontal,
   Download,
   RefreshCw,
   Trash2,
-  Check,
-  X,
   Settings,
-  Globe
+  Globe,
+  Clock,
+  Circle,
+  Square
 } from 'lucide-react';
 import * as Icons from 'lucide-react';
-import { Workflow } from '../types/workflow';
+import { Workflow, WorkflowNode } from '../types/workflow';
 import { StorageService } from '../services/storageService';
 import { WorkflowService } from '../services/workflowService';
 
@@ -67,6 +66,11 @@ const getTriggerIcon = (workflow: Workflow) => {
   return Activity; // fallback icon
 };
 
+const getNodeIcon = (iconName: string) => {
+  const IconComponent = (Icons as any)[iconName];
+  return IconComponent || Circle;
+};
+
 const WorkflowList: React.FC<WorkflowListProps> = ({ 
   workflows, 
   onWorkflowSelect, 
@@ -75,30 +79,31 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
   onWorkflowUpdate,
   onWorkflowDelete
 }) => {
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
   const [exportingWorkflow, setExportingWorkflow] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [deletingWorkflow, setDeletingWorkflow] = useState<string | null>(null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-500';
-      case 'paused': return 'bg-yellow-500';
-      case 'draft': return 'bg-secondary-400';
-      case 'error': return 'bg-red-500';
-      default: return 'bg-secondary-400';
+      case 'paused': return 'bg-amber-500';
+      case 'draft': return 'bg-zinc-400';
+      case 'error': return 'bg-rose-500';
+      default: return 'bg-zinc-400';
     }
+  };
+  
+  // Format for display
+  const getStatusLabel = (status: string) => {
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   const handleExportWorkflow = async (workflow: Workflow) => {
     try {
       setExportingWorkflow(workflow.id);
       await StorageService.exportWorkflow(workflow);
-      // You could show a success message here
     } catch (error) {
       console.error('Error exporting workflow:', error);
-      // You could show an error message here
     } finally {
       setExportingWorkflow(null);
     }
@@ -108,28 +113,20 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
     try {
       setUpdatingStatus(workflow.id);
       
-      console.log(`🔄 Changing workflow "${workflow.name}" status from ${workflow.status} to ${newStatus}`);
-      
-      // Update workflow status
       const updatedWorkflow = {
         ...workflow,
         status: newStatus,
-        isActive: newStatus === 'active', // Keep isActive in sync
+        isActive: newStatus === 'active',
         updatedAt: new Date()
       };
 
-      // Save to database
       const savedWorkflow = await WorkflowService.saveWorkflow(updatedWorkflow);
       
-      // Notify parent component to update the list
       if (onWorkflowUpdate) {
         onWorkflowUpdate(savedWorkflow);
       }
-      
-      console.log(`✅ Updated workflow "${workflow.name}" to ${newStatus}`);
     } catch (error) {
-      console.error('❌ Error updating workflow status:', error);
-      // You could show an error message here
+      console.error('Error updating workflow status:', error);
     } finally {
       setUpdatingStatus(null);
     }
@@ -137,13 +134,9 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
 
   const handleQuickToggle = async (workflow: Workflow, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    // Quick toggle between active and paused
     const newStatus = workflow.status === 'active' ? 'paused' : 'active';
     await handleStatusChange(workflow, newStatus);
   };
-
-
 
   const handleDeleteWorkflow = async (workflowId: string) => {
     if (!window.confirm('Are you sure you want to delete this workflow? This action cannot be undone.')) {
@@ -152,258 +145,184 @@ const WorkflowList: React.FC<WorkflowListProps> = ({
 
     try {
       setDeletingWorkflow(workflowId);
-      
-      // Delete from database
       await WorkflowService.deleteWorkflow(workflowId);
       
-      // Notify parent component to update the list
       if (onWorkflowDelete) {
         onWorkflowDelete(workflowId);
       }
-      
-      console.log(`✅ Deleted workflow ${workflowId}`);
     } catch (error) {
-      console.error('❌ Error deleting workflow:', error);
-      // You could show an error message here
+      console.error('Error deleting workflow:', error);
     } finally {
       setDeletingWorkflow(null);
-      setOpenDropdown(null);
     }
   };
 
   const StatusDot: React.FC<{ workflow: Workflow }> = ({ workflow }) => {
     return (
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
         {updatingStatus === workflow.id ? (
-          <RefreshCw className="w-2 h-2 animate-spin text-secondary-400" />
+          <RefreshCw className="size-2 animate-spin text-zinc-400" />
         ) : (
           <div 
-            className={`w-2 h-2 rounded-full ${getStatusColor(workflow.status)}`}
-            title={`Status: ${workflow.status}`}
+            className={`size-2 rounded-full ${getStatusColor(workflow.status)}`}
           />
         )}
+        <span className="text-sm text-zinc-600">{getStatusLabel(workflow.status)}</span>
       </div>
     );
   };
 
-  const WorkflowMenu: React.FC<{ workflow: Workflow }> = ({ workflow }) => {
-    const isOpen = openDropdown === workflow.id;
-    
+  const NodePill: React.FC<{ node: WorkflowNode }> = ({ node }) => {
+    const Icon = getNodeIcon(node.icon);
     return (
-      <div className="relative z-[60]">
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpenDropdown(isOpen ? null : workflow.id);
-          }}
-          className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
-          title="More options"
-        >
-          <MoreHorizontal className="w-4 h-4 text-secondary-400" />
-        </button>
-        
-        {isOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-[55]"
-              onClick={() => setOpenDropdown(null)}
-            />
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-secondary-200 rounded-lg shadow-xl z-[60] max-h-64 overflow-y-auto">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpenDropdown(null);
-                  handleExportWorkflow(workflow);
-                }}
-                disabled={exportingWorkflow === workflow.id}
-                className="w-full text-left px-3 py-2 flex items-center hover:bg-secondary-50 first:rounded-t-lg disabled:opacity-50 transition-colors"
-              >
-                <Download className="w-4 h-4 mr-3 text-secondary-500" />
-                <span className="text-sm text-secondary-700">
-                  {exportingWorkflow === workflow.id ? 'Exporting...' : 'Export'}
-                </span>
-              </button>
-              
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Add duplicate functionality here if needed
-                  setOpenDropdown(null);
-                }}
-                className="w-full text-left px-3 py-2 flex items-center hover:bg-secondary-50 transition-colors"
-              >
-                <Settings className="w-4 h-4 mr-3 text-secondary-500" />
-                <span className="text-sm text-secondary-700">Settings</span>
-              </button>
-              
-              <hr className="border-secondary-100" />
-              
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteWorkflow(workflow.id);
-                }}
-                disabled={deletingWorkflow === workflow.id}
-                className="w-full text-left px-3 py-2 flex items-center hover:bg-red-50 last:rounded-b-lg disabled:opacity-50 transition-colors"
-              >
-                <Trash2 className="w-4 h-4 mr-3 text-red-500" />
-                <span className="text-sm text-red-600">
-                  {deletingWorkflow === workflow.id ? 'Deleting...' : 'Delete'}
-                </span>
-              </button>
-            </div>
-          </>
-        )}
+      <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-100 border border-zinc-200 rounded text-xs text-zinc-600 max-w-[140px]">
+        <Icon className="size-3 flex-shrink-0 text-zinc-500" />
+        <span className="truncate">{node.name}</span>
       </div>
     );
   };
 
   return (
-    <div className="flex-1 bg-secondary-50">
-      <div className="max-w-7xl mx-auto">
-        {/* Clean Header */}
-          <div className="px-8 py-6 pt-12">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                {/* Page Title and Description */}
-                <div>
-                  <h1 className="text-3xl font-medium text-secondary-900 tracking-tight">Personalization Playbooks</h1>
-                  <p className="text-sm text-secondary-600">Create and manage website personalization rules for different visitor segments</p>
-                </div>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={onCreateWorkflow}
-                  className="flex items-center space-x-2 px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium text-sm rounded-lg"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>New Playbook</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
+    <div className="flex-1 bg-white">
+      <div className="max-w-[1600px] mx-auto px-6 py-6">
+        
         {/* Main Content */}
-        <div className="px-8 pb-8 relative">
+        <div className="relative">
           {workflows.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-white border border-secondary-300 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <Activity className="w-8 h-8 text-secondary-400" />
+            <div className="text-center py-16 border border-zinc-200 rounded-md bg-white">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-zinc-100 flex items-center justify-center">
+                <Activity className="size-6 text-zinc-400" />
               </div>
-              <h3 className="text-xl font-semibold text-secondary-900 mb-2">No playbooks yet</h3>
-              <p className="text-secondary-600 mb-6 max-w-sm mx-auto">
-                Create your first personalization playbook to get started with targeting different visitor segments.
+              <h3 className="text-sm font-medium text-zinc-900 mb-1">No playbooks yet</h3>
+              <p className="text-xs text-zinc-500 mb-4">
+                Create your first personalization playbook to get started.
               </p>
               <button
                 onClick={onCreateWorkflow}
-                className="bg-primary-500 text-white px-6 py-3 rounded-lg hover:bg-primary-600 transition-colors font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white hover:bg-zinc-800 transition-colors font-medium text-sm rounded-md shadow-sm"
               >
                 Create Your First Playbook
               </button>
             </div>
           ) : (
-            <div className="space-y-4 relative">
+            <div className="space-y-8">
+              {/* Groups */}
               {groupWorkflowsByUrl(workflows).map((group) => (
-                <div key={group.url} className="bg-white rounded-lg border border-secondary-200 shadow-sm">
-                  {/* URL Group Header */}
-                  <div className="px-6 py-4 bg-secondary-50 border-b border-secondary-100">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-white rounded-lg">
-                          <Globe className="w-4 h-4 text-secondary-500" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-medium text-secondary-900">
-                            {group.url === 'No Target URL' ? 'General Playbooks' : group.url}
-                          </h3>
-                          <p className="text-xs text-secondary-600">
-                            {group.workflows.length} playbook{group.workflows.length !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                <div key={group.url}>
+                  {/* Website Title */}
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <Globe className="size-4 text-zinc-500" />
+                    <h2 className="font-medium text-zinc-900">
+                      {group.url === 'No Target URL' ? 'General Playbooks' : group.url}
+                    </h2>
+                    <span className="text-zinc-400 text-sm ml-1">
+                      {group.workflows.length}
+                    </span>
                   </div>
+                  
+                  {/* Table for this website */}
+                  <div className="border border-zinc-200 rounded-md bg-white overflow-hidden">
+                    <div className="divide-y divide-zinc-100">
+                      {group.workflows.map((workflow) => {
+                        // Filter out trigger node to show only action/logic nodes
+                        const contentNodes = workflow.nodes.filter(n => n.type !== 'trigger');
+                        // Take first 2 nodes to display
+                        const displayNodes = contentNodes.slice(0, 2);
+                        const remainingCount = contentNodes.length - 2;
 
-                  {/* Workflows List */}
-                  <div className="divide-y divide-secondary-100 relative overflow-visible">
-                    {group.workflows.map((workflow, index) => (
-                      <div
-                        key={workflow.id}
-                        className={`px-6 py-5 hover:bg-secondary-50 transition-colors cursor-pointer group relative overflow-visible ${
-                          index === group.workflows.length - 1 ? 'rounded-b-lg' : ''
-                        }`}
-                        onClick={() => onWorkflowSelect(workflow)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4 min-w-0 flex-1">
-                            {/* Workflow Icon */}
-                            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                              {React.createElement(getTriggerIcon(workflow), { className: "w-5 h-5 text-white" })}
-                            </div>
-                            
-                            {/* Workflow Info */}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center space-x-3 mb-1">
-                                <h3 className="text-base font-medium text-secondary-900 truncate">{workflow.name}</h3>
-                                <StatusDot workflow={workflow} />
+                        return (
+                          <div
+                            key={workflow.id}
+                            className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-zinc-50 transition-colors cursor-pointer"
+                            onClick={() => onWorkflowSelect(workflow)}
+                          >
+                            {/* Name Column */}
+                            <div className="col-span-5 flex items-center gap-4 min-w-0">
+                              <div className="size-10 rounded-md border border-zinc-200 flex items-center justify-center flex-shrink-0 bg-white">
+                                {React.createElement(getTriggerIcon(workflow), { className: "size-5 text-zinc-500" })}
                               </div>
-                              <p className="text-sm text-secondary-600 line-clamp-1">{workflow.description}</p>
+                              
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-zinc-900 truncate text-sm mb-0.5">
+                                  {workflow.name}
+                                </div>
+                                <div className="text-xs text-zinc-500 truncate flex items-center gap-1.5">
+                                  <span className="truncate">
+                                    {workflow.description || 'No description'}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Workflow Metrics and Actions */}
-                          <div className="flex items-center space-x-6 ml-4 flex-shrink-0">
-                            {/* Metrics */}
-                            <div className="hidden md:flex items-center space-x-6 text-sm text-secondary-500">
-                              <span className="font-medium text-primary-600">{workflow.executions} executions</span>
-                              <span>{workflow.nodes.length} nodes</span>
-                              <span>Updated {workflow.updatedAt.toLocaleDateString()}</span>
+                            {/* Status Column */}
+                            <div className="col-span-2">
+                              <StatusDot workflow={workflow} />
                             </div>
 
-                            {/* Quick Actions */}
-                            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {/* Quick Toggle Button */}
+                            {/* Nodes Column (was Last Run) */}
+                            <div className="col-span-3 flex items-center gap-2 min-w-0">
+                              {displayNodes.length > 0 ? (
+                                <>
+                                  {displayNodes.map(node => (
+                                    <NodePill key={node.id} node={node} />
+                                  ))}
+                                  {remainingCount > 0 && (
+                                    <div className="text-xs text-zinc-400 px-1">+{remainingCount}</div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-xs text-zinc-400 italic">No actions</span>
+                              )}
+                            </div>
+
+                            {/* Actions Column */}
+                            <div className="col-span-2 flex items-center justify-end gap-2">
                               <button
                                 onClick={(e) => handleQuickToggle(workflow, e)}
                                 disabled={updatingStatus === workflow.id}
-                                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
-                                  workflow.status === 'active' 
-                                    ? 'bg-green-100 text-green-600 hover:bg-green-200' 
-                                    : 'bg-secondary-100 text-secondary-600 hover:bg-secondary-200'
-                                }`}
-                                title={workflow.status === 'active' ? 'Pause workflow' : 'Activate workflow'}
+                                className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors"
+                                title={workflow.status === 'active' ? 'Pause' : 'Activate'}
                               >
                                 {updatingStatus === workflow.id ? (
-                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  <RefreshCw className="size-4 animate-spin" />
                                 ) : workflow.status === 'active' ? (
-                                  <Pause className="w-4 h-4" />
+                                  <Pause className="size-4" />
                                 ) : (
-                                  <Play className="w-4 h-4" />
+                                  <Play className="size-4" />
                                 )}
                               </button>
-                              
-                              {/* Export Button */}
+
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleExportWorkflow(workflow);
+                                  if (onWorkflowSelect) onWorkflowSelect(workflow);
                                 }}
-                                disabled={exportingWorkflow === workflow.id}
-                                className="p-2 hover:bg-secondary-100 rounded-lg transition-colors disabled:opacity-50"
-                                title="Export workflow"
+                                className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors"
+                                title="Settings"
                               >
-                                <Download className="w-4 h-4 text-secondary-400" />
+                                <Settings className="size-4" />
                               </button>
-                              
-                              {/* More Options */}
-                              <WorkflowMenu workflow={workflow} />
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteWorkflow(workflow.id);
+                                }}
+                                disabled={deletingWorkflow === workflow.id}
+                                className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                                title="Delete"
+                              >
+                                {deletingWorkflow === workflow.id ? (
+                                  <RefreshCw className="size-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                )}
+                              </button>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               ))}

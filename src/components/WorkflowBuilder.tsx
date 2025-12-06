@@ -1,45 +1,163 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { 
-  Plus, 
-  Play, 
-  Save, 
-  Settings, 
   ArrowLeft,
-  Trash2,
-  Copy,
   Loader2,
   Check,
-  Code2,
-  Pause,
-  Edit,
-  AlertCircle,
   AlertTriangle,
-  Database
+  Play,
+  Pause,
+  AlertCircle,
+  Edit,
+  Database,
+  Code2,
+  Save,
+  Plus,
+  Layout
 } from 'lucide-react';
-import { Workflow, WorkflowNode } from '../types/workflow';
-import NodeLibrary from './NodeLibrary';
-import WorkflowCanvas from './WorkflowCanvas';
-import NodeConfigPanel from './NodeConfigPanel';
-import ScrapingResults from './ScrapingResults';
+import ReactFlow, {
+  Node,
+  Edge,
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  ReactFlowProvider,
+  addEdge,
+  Connection,
+  MarkerType,
+  useReactFlow,
+  BackgroundVariant,
+  NodeChange,
+  EdgeChange,
+  applyNodeChanges,
+  applyEdgeChanges
+} from 'reactflow';
+import ELK from 'elkjs/lib/elk.bundled.js';
+import 'reactflow/dist/style.css';
+
+import { Workflow, WorkflowNode, WorkflowConnection } from '../types/workflow';
+import AddNodeMenu from './AddNodeMenu';
+// import NodeConfigPanel from './NodeConfigPanel';
 import IntegrationModal from './IntegrationModal';
 import EnvironmentComponents from './EnvironmentComponents';
-import { useWebScraper } from '../hooks/useWebScraper';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useToast } from './Toast';
+import WorkflowBuilderNode from './WorkflowBuilderNode';
 
 interface WorkflowBuilderProps {
   workflow: Workflow;
   onBack: () => void;
-  onSave: (workflow: Workflow) => void;
+  onSave: (workflow: Workflow) => Promise<void>;
 }
 
-const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ 
+const nodeTypes = {
+  custom: WorkflowBuilderNode,
+};
+
+// ELK instance for layout
+const elk = new ELK();
+
+// ELK layout options
+const elkOptions = {
+  'elk.algorithm': 'layered',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+  'elk.spacing.nodeNode': '100',
+  'elk.direction': 'DOWN',
+};
+
+// Function to apply ELK layout
+async function getLayoutedElements(nodes: Node[], edges: Edge[]) {
+  const graph = {
+    id: 'root',
+    layoutOptions: elkOptions,
+    children: nodes.map((node) => {
+      // Use measured dimensions if available, otherwise fallback to defaults
+      // ReactFlow v11+ stores dimensions in 'measured' object, older versions or initial state might use width/height or nothing
+      const width = node.measured?.width ?? node.width ?? 320;
+      const height = node.measured?.height ?? node.height ?? 300; // Increased default height to be safe
+      
+      return {
+        id: node.id,
+        width: width + 40, // Add horizontal padding for layout
+        height: height + 40, // Add vertical padding for layout
+      };
+    }),
+    edges: edges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.source],
+      targets: [edge.target],
+    })),
+  };
+
+  try {
+    const layoutedGraph = await elk.layout(graph);
+
+    const layoutedNodes = nodes.map((node) => {
+      const layoutedNode = layoutedGraph.children?.find((n) => n.id === node.id);
+      return {
+        ...node,
+        position: {
+          x: layoutedNode?.x ?? node.position.x,
+          y: layoutedNode?.y ?? node.position.y,
+        },
+      };
+    });
+
+    return { nodes: layoutedNodes, edges };
+  } catch (error) {
+    console.error('Layout calculation failed:', error);
+    return { nodes, edges };
+  }
+}
+
+// Helper to convert WorkflowNode to ReactFlow Node
+const toRfNode = (
+  node: WorkflowNode, 
+  onUpdate?: (node: WorkflowNode) => void, 
+  onDelete?: (id: string) => void,
+  onOpenComponentPicker?: (callback: (value: string) => void) => void
+): Node => ({
+  id: node.id,
+  type: 'custom',
+  position: node.position,
+  data: { 
+    node, 
+    onUpdate,
+    onDelete,
+    onOpenComponentPicker
+  },
+  dragHandle: '.drag-handle',
+});
+
+// Helper to convert WorkflowConnection to ReactFlow Edge
+const toRfEdge = (conn: WorkflowConnection): Edge => ({
+  id: conn.id,
+  source: conn.sourceNodeId,
+  target: conn.targetNodeId,
+  sourceHandle: conn.sourceHandle,
+  targetHandle: conn.targetHandle,
+  type: 'smoothstep',
+  animated: true,
+  style: { stroke: '#a1a1aa', strokeWidth: 2, strokeDasharray: '5,5' },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#a1a1aa' },
+});
+
+const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ 
   workflow, 
   onBack, 
   onSave 
 }) => {
-  const [currentWorkflow, setCurrentWorkflow] = useState<Workflow>(workflow);
-  const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null);
+  // --- State ---
+  const [nodes, setNodes] = useNodesState([]);
+  const [edges, setEdges] = useEdgesState([]);
+  
+  // Internal state for workflow metadata (name, etc.)
+  const [currentWorkflowMeta, setCurrentWorkflowMeta] = useState<Omit<Workflow, 'nodes' | 'connections'>>({
+    ...workflow
+  });
+  
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [connectingFromNode, setConnectingFromNode] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
@@ -49,50 +167,299 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   const [url, setUrl] = useState(workflow.targetUrl || '');
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   const [showEnvironmentComponents, setShowEnvironmentComponents] = useState(false);
-  
-  // Change detection and save state management
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [originalWorkflow, setOriginalWorkflow] = useState<Workflow>(workflow);
+  const [componentPickerCallback, setComponentPickerCallback] = useState<((value: string) => void) | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Web scraping functionality
-  const { isScraping, scrapingResult, scrapeUrl, clearResult } = useWebScraper();
-  const [showScrapingResults, setShowScrapingResults] = useState(false);
-  
-  // Toast notifications
-  const { showToast } = useToast();
+  const [originalWorkflow, setOriginalWorkflow] = useState<Workflow>(workflow);
 
-  // Deep comparison for change detection
-  const hasChanges = useMemo(() => {
-    if (!originalWorkflow) return false;
-    
-    return (
-      currentWorkflow.name !== originalWorkflow.name ||
-      currentWorkflow.description !== originalWorkflow.description ||
-      currentWorkflow.targetUrl !== originalWorkflow.targetUrl ||
-      JSON.stringify(currentWorkflow.nodes) !== JSON.stringify(originalWorkflow.nodes) ||
-      JSON.stringify(currentWorkflow.connections) !== JSON.stringify(originalWorkflow.connections)
+  const { showToast } = useToast();
+  const { fitView, getNodes, getEdges } = useReactFlow();
+
+  // --- Event Handlers (Defined before effects) ---
+
+  const handleNodeDelete = useCallback((nodeId: string) => {
+    setNodes(nds => nds.filter(n => n.id !== nodeId));
+    setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
+    if (selectedNodeId === nodeId) setSelectedNodeId(null);
+  }, [selectedNodeId, setNodes, setEdges]);
+
+  const handleNodeUpdate = useCallback((updatedWorkflowNode: WorkflowNode) => {
+    setNodes(nds => nds.map(n => {
+        if (n.id === updatedWorkflowNode.id) {
+            return {
+                ...n,
+                // Do NOT update position here to avoid jumping issues
+                // Position is managed by ReactFlow via onNodesChange
+                data: { 
+                    ...n.data, 
+                    node: updatedWorkflowNode 
+                }
+            };
+        }
+        return n;
+    }));
+  }, [setNodes]);
+
+  const handleOpenComponentPicker = useCallback((callback: (value: string) => void) => {
+    setComponentPickerCallback(() => callback);
+    setShowEnvironmentComponents(true);
+  }, []);
+
+  // --- Layout Helper ---
+  const onLayout = useCallback(async () => {
+    const { nodes: layoutedNodes, edges: layoutedEdges } = await getLayoutedElements(
+      nodes,
+      edges
     );
+    setNodes([...layoutedNodes]);
+    setEdges([...layoutedEdges]);
+    
+    setTimeout(() => {
+      fitView({ padding: 0.2, maxZoom: 1, duration: 300 });
+    }, 50);
+  }, [nodes, edges, setNodes, setEdges, fitView]);
+
+  // --- Initialization ---
+  useEffect(() => {
+    if (workflow.id !== originalWorkflow.id) {
+        const initialNodes = workflow.nodes.map(n => toRfNode(n, handleNodeUpdate, handleNodeDelete, handleOpenComponentPicker));
+        const initialEdges = workflow.connections.map(toRfEdge);
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+        setCurrentWorkflowMeta({ ...workflow });
+        setOriginalWorkflow(workflow);
+        setTempName(workflow.name);
+        setUrl(workflow.targetUrl || '');
+        
+        // Apply layout on load if nodes exist but positions are all 0,0 or clumped
+        // Or just always apply for consistency if requested
+        if (initialNodes.length > 0) {
+            getLayoutedElements(initialNodes, initialEdges).then(({ nodes: lNodes, edges: lEdges }) => {
+                setNodes(lNodes);
+                setEdges(lEdges);
+                setTimeout(() => fitView({ padding: 0.2, maxZoom: 1 }), 50);
+            });
+        }
+    }
+  }, [workflow.id, originalWorkflow.id, handleNodeUpdate, handleNodeDelete, handleOpenComponentPicker]);
+
+  // Initial load
+  useEffect(() => {
+    const initialNodes = workflow.nodes.map(n => toRfNode(n, handleNodeUpdate, handleNodeDelete, handleOpenComponentPicker));
+    const initialEdges = workflow.connections.map(toRfEdge);
+    
+    getLayoutedElements(initialNodes, initialEdges).then(({ nodes: lNodes, edges: lEdges }) => {
+        setNodes(lNodes);
+        setEdges(lEdges);
+        setTimeout(() => fitView({ padding: 0.2, maxZoom: 1 }), 50);
+    });
+  }, []); // Only run once on mount
+
+  // --- Computed Data ---
+  
+  // Construct current workflow object for comparison and saving
+  const currentWorkflow = useMemo((): Workflow => {
+    return {
+      ...currentWorkflowMeta,
+      nodes: nodes.map(n => ({
+        ...n.data.node,
+        position: n.position
+      })),
+      connections: edges.map(e => ({
+        id: e.id,
+        sourceNodeId: e.source,
+        targetNodeId: e.target,
+        sourceHandle: e.sourceHandle || 'output',
+        targetHandle: e.targetHandle || 'input'
+      }))
+    };
+  }, [currentWorkflowMeta, nodes, edges]);
+
+  // Check for changes
+  const hasChanges = useMemo(() => {
+    const isSame = 
+      currentWorkflow.name === originalWorkflow.name &&
+      currentWorkflow.description === originalWorkflow.description &&
+      currentWorkflow.targetUrl === originalWorkflow.targetUrl &&
+      currentWorkflow.status === originalWorkflow.status &&
+      JSON.stringify(currentWorkflow.nodes) === JSON.stringify(originalWorkflow.nodes) &&
+      JSON.stringify(currentWorkflow.connections) === JSON.stringify(originalWorkflow.connections);
+    
+    return !isSame;
   }, [currentWorkflow, originalWorkflow]);
 
-  // Sync internal state with workflow prop when it changes
-  useEffect(() => {
-    setCurrentWorkflow(workflow);
-    setTempName(workflow.name);
-    setUrl(workflow.targetUrl || '');
-    setSelectedNode(null);
-    setOriginalWorkflow(workflow);
-    setHasUnsavedChanges(false);
-  }, [workflow]);
+  // --- Event Handlers ---
 
-  useEffect(() => {
-    setUrl(workflow.targetUrl || '');
-  }, [workflow.targetUrl]);
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((nds) => applyNodeChanges(changes, nds));
+  }, [setNodes]);
 
-  // Update unsaved state when changes detected
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+  }, [setEdges]);
+
+  const onConnect = useCallback((params: Connection) => {
+    const newEdge = {
+        ...params,
+        id: `conn-${Date.now()}`,
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: '#a1a1aa', strokeWidth: 2, strokeDasharray: '5,5' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#a1a1aa' },
+    };
+    setEdges((eds) => addEdge(newEdge, eds));
+  }, [setEdges]);
+
+  const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id);
+  }, []);
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleSave = async () => {
+    if (!hasChanges || isSaving) return;
+    
+    try {
+      setIsSaving(true);
+      await onSave(currentWorkflow);
+      setOriginalWorkflow(currentWorkflow);
+    } catch (error) {
+      console.error('Save failed:', error);
+      showToast('Failed to save workflow', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Auto-save
+  useAutoSave(currentWorkflow, {
+    enabled: hasChanges && !isSaving,
+    delay: 3000,
+    onSave: async (wf) => {
+      await onSave(wf);
+      return wf;
+    },
+    onSuccess: () => {
+        setOriginalWorkflow(currentWorkflow);
+        console.log('🔄 Auto-saved workflow');
+    },
+    onError: (error) => {
+      console.error('❌ Auto-save failed:', error);
+      showToast('Auto-save failed', 'error');
+    }
+  });
+
+  // Node Library & Adding Nodes
+  const calculateNodePosition = useCallback((nodeType: string, currentNodes: Node[]) => {
+    const triggerNode = currentNodes.find(n => n.data.node.type === 'trigger');
+    
+    if (nodeType === 'trigger') {
+      return { x: 400, y: 50 };
+    }
+    
+    if (triggerNode) {
+      // Simple layout logic: find lowest node and place below
+      let maxY = triggerNode.position.y;
+      currentNodes.forEach(n => {
+          if (n.position.y > maxY) maxY = n.position.y;
+      });
+      
+      return { x: triggerNode.position.x, y: maxY + 150 };
+    }
+    
+    return { x: 400, y: 200 };
+  }, []);
+
+  const handleNodeAdd = useCallback(async (newNodeData: WorkflowNode) => {
+    const currentNodes = getNodes();
+    const currentEdges = getEdges();
+
+    let updatedNodes = [...currentNodes];
+    let updatedEdges = [...currentEdges];
+
+    // If adding trigger and one exists, remove it
+    if (newNodeData.type === 'trigger') {
+        updatedNodes = updatedNodes.filter(n => n.data.node.type !== 'trigger');
+        // Also remove edges connected to old trigger
+        updatedEdges = updatedEdges.filter(e => {
+            const isConnectedToTrigger = currentNodes.find(n => n.data.node.type === 'trigger' && (n.id === e.source || n.id === e.target));
+            return !isConnectedToTrigger;
+        });
+    }
+
+    const position = calculateNodePosition(newNodeData.type, updatedNodes);
+    
+    const newNode: Node = {
+        id: newNodeData.id,
+        type: 'custom',
+        position,
+        data: { 
+            node: { ...newNodeData, position }, // Keep position in sync
+            onDelete: handleNodeDelete, // Pass delete handler to node
+            onUpdate: handleNodeUpdate,
+            onOpenComponentPicker: handleOpenComponentPicker
+        },
+    };
+    
+    updatedNodes.push(newNode);
+
+    // Determine source for connection: explicitly selected node OR default to trigger
+    let sourceNodeId = connectingFromNode;
+    
+    if (!sourceNodeId && newNodeData.type !== 'trigger') {
+        const triggerNode = updatedNodes.find(n => n.data.node.type === 'trigger');
+        if (triggerNode) {
+            sourceNodeId = triggerNode.id;
+        }
+    }
+
+    // If we have a source to connect from
+    if (sourceNodeId) {
+        const newEdge = {
+            id: `conn-${Date.now()}`,
+            source: sourceNodeId,
+            target: newNode.id,
+            sourceHandle: 'output',
+            targetHandle: 'input', // Explicitly set target handle
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#a1a1aa', strokeWidth: 2, strokeDasharray: '5,5' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#a1a1aa' },
+        };
+        updatedEdges = addEdge(newEdge, updatedEdges);
+    }
+
+    // Auto layout immediately with new nodes/edges
+    const { nodes: layoutedNodes, edges: layoutedEdges } = await getLayoutedElements(
+        updatedNodes,
+        updatedEdges
+    );
+    
+    setNodes(layoutedNodes);
+    setEdges(layoutedEdges);
+    
+    setTimeout(() => {
+        fitView({ padding: 0.2, maxZoom: 1, duration: 300 });
+    }, 50);
+
+    setConnectingFromNode(null);
+    setIsLibraryOpen(false);
+  }, [connectingFromNode, calculateNodePosition, setNodes, setEdges, handleNodeDelete, handleNodeUpdate, handleOpenComponentPicker, getNodes, getEdges, fitView]);
+
+  // Removed duplicate definitions of handleNodeDelete and handleNodeUpdate from here as they were moved up
+
+  // Pass delete handler to existing nodes
   useEffect(() => {
-    setHasUnsavedChanges(hasChanges);
-  }, [hasChanges]);
+    setNodes(nds => nds.map(n => ({
+        ...n,
+        data: {
+            ...n.data,
+            onDelete: handleNodeDelete,
+            onOpenComponentPicker: handleOpenComponentPicker
+        }
+    })));
+  }, [handleNodeDelete, handleOpenComponentPicker]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -107,506 +474,241 @@ const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasChanges, isSaving]);
+  }, [hasChanges, isSaving, handleSave]);
 
-  // Warn before leaving with unsaved changes
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-        return e.returnValue;
-      }
-    };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
-
-  // Auto-save functionality
-  const autoSaveStatus = useAutoSave(currentWorkflow, {
-    enabled: hasChanges && !isSaving,
-    delay: 3000, // 3 seconds
-    onSave: async (workflow) => {
-      await onSave(workflow);
-      return workflow; // Return the workflow for the hook
-    },
-    onSuccess: (workflow) => {
-      // The workflow prop will be updated by the parent component
-      console.log('🔄 Auto-saved workflow');
-    },
-    onError: (error) => {
-      console.error('❌ Auto-save failed:', error);
-      showToast('Auto-save failed', 'error');
-    }
-  });
-
-  const calculateNodePosition = useCallback((nodeType: string, currentNodes: WorkflowNode[]) => {
-    const triggerNode = currentNodes.find(n => n.type === 'trigger');
-    
-    if (nodeType === 'trigger') {
-      // Trigger should be at the top
-      return { x: 400, y: 50 };
-    }
-    
-    if (triggerNode) {
-      // Find all operation nodes
-      const operationNodes = currentNodes.filter(n => n.type !== 'trigger');
-      const nodeHeight = 120; // Approximate node height
-      const nodeSpacing = 50;
-      
-      // Calculate position below trigger - stack nodes vertically
-      const yPosition = triggerNode.position.y + nodeHeight + nodeSpacing + (operationNodes.length * (nodeHeight + nodeSpacing));
-      
-      // Keep x position centered with the trigger
-      const xPosition = triggerNode.position.x;
-      
-      return { x: xPosition, y: yPosition };
-    }
-    
-    // Default position if no trigger exists
-    return { x: 100, y: 100 };
-  }, []);
-
-  const handleNodeAdd = useCallback((node: WorkflowNode) => {
-    setCurrentWorkflow(prev => {
-      let updatedNodes = [...prev.nodes];
-      let updatedConnections = [...prev.connections];
-
-      // Validation: First node must be a trigger
-      if (updatedNodes.length === 0 && node.type !== 'trigger') {
-        alert('The first node in a workflow must be a trigger. Please add a trigger node first.');
-        return prev;
-      }
-
-      // Calculate proper position for the new node
-      const position = calculateNodePosition(node.type, updatedNodes);
-      const positionedNode = { ...node, position };
-
-      // If adding a trigger and one already exists, replace it
-      if (node.type === 'trigger') {
-        const existingTriggerIndex = updatedNodes.findIndex(n => n.type === 'trigger');
-        if (existingTriggerIndex !== -1) {
-          const existingTriggerId = updatedNodes[existingTriggerIndex].id;
-          // Remove the existing trigger
-          updatedNodes.splice(existingTriggerIndex, 1);
-          // Remove connections from the old trigger
-          updatedConnections = updatedConnections.filter(
-            conn => conn.sourceNodeId !== existingTriggerId
-          );
-        }
-      }
-
-      // Add the new node
-      updatedNodes.push(positionedNode);
-
-      // If we're connecting from another node, create a connection
-      if (connectingFromNode) {
-        const connection = {
-          id: `conn-${Date.now()}`,
-          sourceNodeId: connectingFromNode,
-          targetNodeId: positionedNode.id,
-          sourceHandle: 'output',
-          targetHandle: 'input'
-        };
-        updatedConnections.push(connection);
-      }
-
-      return {
-        ...prev,
-        nodes: updatedNodes,
-        connections: updatedConnections
-      };
-    });
-
-    if (connectingFromNode) {
-      setConnectingFromNode(null);
-    }
-    setIsLibraryOpen(false);
-  }, [connectingFromNode, calculateNodePosition]);
-
-  const handleNodeUpdate = useCallback((updatedNode: WorkflowNode) => {
-    setCurrentWorkflow(prev => ({
-      ...prev,
-      nodes: prev.nodes.map(node => 
-        node.id === updatedNode.id ? updatedNode : node
-      )
-    }));
-    setSelectedNode(updatedNode);
-  }, []);
-
-  const handleNodeDelete = useCallback((nodeId: string) => {
-    setCurrentWorkflow(prev => ({
-      ...prev,
-      nodes: prev.nodes.filter(node => node.id !== nodeId),
-      connections: prev.connections.filter(
-        conn => conn.sourceNodeId !== nodeId && conn.targetNodeId !== nodeId
-      )
-    }));
-    setSelectedNode(null);
-  }, []);
-
-  const handleSave = async () => {
-    if (!hasChanges || isSaving) return;
-    
-    try {
-      setIsSaving(true);
-      
-      await onSave(currentWorkflow);
-      
-      // The workflow prop will be updated by the parent component
-      // So we'll reset change tracking in the useEffect when workflow changes
-      
-    } catch (error) {
-      console.error('Save failed:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAddConnection = useCallback((sourceNodeId: string) => {
-    setConnectingFromNode(sourceNodeId);
-    setIsLibraryOpen(true);
-  }, []);
-
-  const handleCanvasAddNode = useCallback(() => {
-    setIsLibraryOpen(true);
-  }, []);
-
-  const handleNameDoubleClick = () => {
-    setEditingName(true);
-    setTempName(currentWorkflow.name);
-  };
-
+  // --- UI Helpers ---
   const handleNameSave = () => {
-    setCurrentWorkflow(prev => ({ ...prev, name: tempName }));
+    setCurrentWorkflowMeta(prev => ({ ...prev, name: tempName }));
     setEditingName(false);
-  };
-
-  const handleNameKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleNameSave();
-    } else if (e.key === 'Escape') {
-      setTempName(currentWorkflow.name);
-      setEditingName(false);
-    }
   };
 
   const handleUrlChange = (newUrl: string) => {
     setUrl(newUrl);
+    setCurrentWorkflowMeta(prev => ({ ...prev, targetUrl: newUrl }));
     
-    // Update the workflow with the new URL
-    setCurrentWorkflow(prev => ({ ...prev, targetUrl: newUrl }));
-    
-    // Only trigger scraping if URL is not empty and looks like a URL
     if (newUrl.trim() && (newUrl.includes('.') || newUrl.includes('http'))) {
       setIsProcessing(true);
-      setIsDone(false);
-      
-      // Trigger web scraping
-      scrapeUrl(newUrl).then(() => {
+      setTimeout(() => {
         setIsProcessing(false);
         setIsDone(true);
-      }).catch(() => {
-        setIsProcessing(false);
-        setIsDone(false);
-      });
+      }, 500);
     } else {
-      // Hide done icon for invalid URLs
       setIsDone(false);
-      clearResult();
+      setIsProcessing(false);
     }
   };
 
+  // Selected Node Object for Config Panel
+  const selectedNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const node = nodes.find(n => n.id === selectedNodeId);
+    if (!node) return null;
+    
+    // Ensure we pass the current visual position, not the stale data.node position
+    return {
+        ...node.data.node,
+        position: node.position
+    } as WorkflowNode;
+  }, [selectedNodeId, nodes]);
+
   return (
-    <div className="h-screen flex flex-col bg-secondary-50 relative">
-      {/* Floating Elements - No container, truly floating on canvas */}
-      <div className="fixed top-4 left-72 right-4 z-30 flex items-start justify-between pointer-events-none">
-        {/* Floating Workflow Details - Left side */}
-        <div className="flex items-start space-x-3 pointer-events-auto">
-          <button
-            onClick={onBack}
-            className="p-2 bg-white/90 backdrop-blur-sm hover:bg-white border border-secondary-200 rounded-lg text-secondary-600 transition-colors shadow-sm"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="pt-1">
+    <div className="h-screen flex flex-col bg-zinc-50 relative">
+      {/* Header Bar */}
+      <div className="w-full bg-white border-b border-zinc-200 z-30">
+        <div className="px-6 py-3 flex items-center justify-between">
+          {/* Left: Back & Title */}
+          <div className="flex items-center space-x-4 flex-1">
+            <button
+              onClick={onBack}
+              className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            
             {editingName ? (
               <input
-                type="text"
-                value={tempName}
-                onChange={(e) => setTempName(e.target.value)}
-                onBlur={handleNameSave}
-                onKeyDown={handleNameKeyDown}
-                className="text-lg font-medium text-secondary-900 bg-white/90 backdrop-blur-sm border border-secondary-300 rounded px-1 py-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-auto min-w-0"
-                style={{ width: `${Math.max(tempName.length * 0.6, 8)}ch` }}
-                autoFocus
+                  type="text"
+                  value={tempName}
+                  onChange={(e) => setTempName(e.target.value)}
+                  onBlur={handleNameSave}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
+                  className="text-sm font-semibold text-zinc-900 bg-white border border-zinc-300 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  autoFocus
               />
             ) : (
               <h1 
-                className="text-lg font-medium text-secondary-900 drop-shadow-sm cursor-pointer hover:text-primary-600 transition-colors"
-                onDoubleClick={handleNameDoubleClick}
-                title="Double-click to edit"
+                  className="text-sm font-semibold text-zinc-900 cursor-pointer hover:text-primary-600 transition-colors"
+                  onDoubleClick={() => { setEditingName(true); setTempName(currentWorkflowMeta.name); }}
               >
-                {currentWorkflow.name}
+                  {currentWorkflowMeta.name}
               </h1>
             )}
-            <div className="flex items-center space-x-2">
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => handleUrlChange(e.target.value)}
-                placeholder="Add a webpage URL"
-                className="text-xs text-secondary-600 bg-white/90 backdrop-blur-sm border border-secondary-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-0"
-                style={{ width: `${Math.max(url.length * 0.5, 20)}ch` }}
-              />
-              {isProcessing && (
-                <Loader2 className="w-3 h-3 text-primary-500 animate-spin" />
-              )}
-              {isDone && scrapingResult?.success && (
-                <div 
-                  title={`Scraped ${scrapingResult.data?.length || 0} elements`}
-                  className="cursor-pointer hover:scale-110 transition-transform"
-                  onClick={() => setShowScrapingResults(true)}
-                >
-                  <Check className="w-3 h-3 text-green-500" />
-                </div>
-              )}
-              {isDone && scrapingResult && !scrapingResult.success && (
-                <div className="w-3 h-3 text-red-500" title={scrapingResult.error}>⚠️</div>
-              )}
-            </div>
           </div>
-        </div>
-        
-        {/* Floating Action Buttons - Right side */}
-        <div className="flex items-center space-x-3 pointer-events-auto">
-          {/* Auto-save Status Indicator */}
-          {autoSaveStatus.status !== 'idle' && (
-            <div className={`flex items-center space-x-1 text-xs px-2 py-1 rounded-md bg-white/90 backdrop-blur-sm border ${
-              autoSaveStatus.status === 'saving'
-                ? 'border-blue-200 text-blue-600'
-                : autoSaveStatus.status === 'saved'
-                ? 'border-green-200 text-green-600'
-                : 'border-red-200 text-red-600'
-            }`}>
-              {autoSaveStatus.status === 'saving' ? (
+          
+          {/* Right: Actions */}
+          <div className="flex items-center space-x-3">
+             {/* Status Toggle with Dot Indicator */}
+              <button
+                  onClick={() => {
+                      const nextStatus = currentWorkflowMeta.status === 'active' ? 'paused' : 'active';
+                      setCurrentWorkflowMeta(prev => ({ ...prev, status: nextStatus, isActive: nextStatus === 'active' }));
+                      handleSave();
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+              >
+                  <div className={`w-2 h-2 rounded-full ${
+                      currentWorkflowMeta.status === 'active' 
+                      ? 'bg-green-500' 
+                      : 'bg-zinc-300'
+                  }`}></div>
+                  <span>{currentWorkflowMeta.status === 'active' ? 'Active' : 'Paused'}</span>
+              </button>
+
+            <button
+              onClick={() => setShowEnvironmentComponents(true)}
+              className="flex items-center space-x-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors font-medium text-sm rounded-lg"
+            >
+              <Database className="w-4 h-4" />
+              <span>Components</span>
+            </button>
+            
+            {/* Integration */}
+            <button
+              onClick={() => setShowIntegrationModal(true)}
+              className="flex items-center space-x-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors font-medium text-sm rounded-lg"
+            >
+              <Code2 className="w-4 h-4" />
+              <span>Integration</span>
+            </button>
+
+            {/* Save */}
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className={`flex items-center space-x-2 px-4 py-2 transition-all font-medium text-sm rounded-lg ${
+                isSaving
+                  ? 'text-zinc-400 bg-zinc-100'
+                  : hasChanges
+                  ? 'text-white bg-zinc-900 hover:bg-zinc-800 shadow-sm'
+                  : 'text-zinc-400 bg-zinc-100'
+              } ${(!hasChanges || isSaving) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              {isSaving ? (
                 <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Auto-saving...</span>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
                 </>
-              ) : autoSaveStatus.status === 'saved' ? (
+              ) : hasChanges ? (
                 <>
-                  <Check className="w-3 h-3" />
-                  <span>Auto-saved</span>
-                  {autoSaveStatus.lastSave && (
-                    <span className="text-gray-500">
-                      • {autoSaveStatus.lastSave.toLocaleTimeString('en-US', { 
-                        hour12: false, 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        second: '2-digit' 
-                      })}
-                    </span>
-                  )}
+                  <Save className="w-4 h-4" />
+                  <span>Save Changes</span>
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>Auto-save failed</span>
+                  <Check className="w-4 h-4" />
+                  <span>Saved</span>
                 </>
               )}
-            </div>
-          )}
-          {/* Workflow Status Toggle */}
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-secondary-600">Status:</span>
-            <div className="relative">
-              <button
-                onClick={async () => {
-                  // Create a status dropdown similar to the one in WorkflowList
-                  const currentStatus = currentWorkflow.status;
-                  let newStatus: 'draft' | 'active' | 'paused' | 'error';
-                  
-                  // Cycle through statuses: draft -> active -> paused -> draft
-                  if (currentStatus === 'draft') {
-                    newStatus = 'active';
-                  } else if (currentStatus === 'active') {
-                    newStatus = 'paused';
-                  } else {
-                    newStatus = 'draft';
-                  }
-                  
-                  // Update local state
-                  const updatedWorkflow = {
-                    ...currentWorkflow,
-                    status: newStatus,
-                    isActive: newStatus === 'active',
-                    updatedAt: new Date()
-                  };
-                  
-                  setCurrentWorkflow(updatedWorkflow);
-                  
-                  // Save to database immediately
-                  try {
-                    await onSave(updatedWorkflow);
-                    showToast(`Workflow status changed to ${newStatus}`, 'success');
-                  } catch (error: any) {
-                    showToast(`Failed to update status: ${error.message}`, 'error');
-                    // Revert on error
-                    setCurrentWorkflow(currentWorkflow);
-                  }
-                }}
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
-                  currentWorkflow.status === 'active'
-                    ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200'
-                    : currentWorkflow.status === 'paused'
-                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'
-                    : currentWorkflow.status === 'error'
-                    ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200'
-                    : 'bg-secondary-100 text-secondary-800 border-secondary-200 hover:bg-secondary-200'
-                }`}
-                title="Click to cycle through statuses"
-              >
-                {currentWorkflow.status === 'active' ? (
-                  <>
-                    <Play className="w-3 h-3 mr-1" />
-                    Active
-                  </>
-                ) : currentWorkflow.status === 'paused' ? (
-                  <>
-                    <Pause className="w-3 h-3 mr-1" />
-                    Paused
-                  </>
-                ) : currentWorkflow.status === 'error' ? (
-                  <>
-                    <AlertCircle className="w-3 h-3 mr-1" />
-                    Error
-                  </>
-                ) : (
-                  <>
-                    <Edit className="w-3 h-3 mr-1" />
-                    Draft
-                  </>
-                )}
-              </button>
-            </div>
+            </button>
           </div>
-          
-          {/* Environment Components Button */}
-          <button
-            onClick={() => setShowEnvironmentComponents(true)}
-            className="flex items-center space-x-2 px-4 py-2 text-blue-700 bg-blue-50/90 backdrop-blur-sm border border-blue-200 hover:bg-blue-100 transition-colors font-medium text-sm rounded-lg shadow-sm"
-            title="Manage reusable components"
-          >
-            <Database className="w-4 h-4" />
-            <span>Components</span>
-          </button>
-          
-          {/* Integration Button - Always visible */}
-          <button
-            onClick={() => setShowIntegrationModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 text-primary-700 bg-primary-50/90 backdrop-blur-sm border border-primary-200 hover:bg-primary-100 transition-colors font-medium text-sm rounded-lg shadow-sm"
-          >
-            <Code2 className="w-4 h-4" />
-            <span>Integration</span>
-          </button>
-          {/* Enhanced Save Button */}
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges || isSaving}
-            className={`flex items-center space-x-2 px-4 py-2 backdrop-blur-sm border transition-all font-medium text-sm rounded-lg shadow-sm ${
-              isSaving
-                ? 'text-blue-700 bg-blue-50/90 border-blue-200'
-                : hasChanges
-                ? 'text-orange-700 bg-orange-50/90 border-orange-200 hover:bg-orange-100 animate-pulse'
-                : 'text-green-700 bg-green-50/90 border-green-200'
-            } ${(!hasChanges || isSaving) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Saving...</span>
-              </>
-            ) : hasChanges ? (
-              <>
-                <AlertCircle className="w-4 h-4" />
-                <span>Save Changes</span>
-                <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Saved</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 
-      {/* Main Content - Canvas takes full height */}
-      <div className="flex-1 flex">
-        {/* Canvas */}
-        <div className="flex-1 relative">
-          <WorkflowCanvas
-            workflow={currentWorkflow}
-            selectedNode={selectedNode}
-            onNodeSelect={setSelectedNode}
-            onNodeUpdate={handleNodeUpdate}
-            onNodeDelete={handleNodeDelete}
-            onAddConnection={handleAddConnection}
-            onAddNode={handleCanvasAddNode}
-          />
-        </div>
+      {/* Canvas */}
+      <div className="flex-1 w-full h-full">
+        <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
+            fitView
+            attributionPosition="bottom-right"
+            proOptions={{ hideAttribution: true }}
+            className="bg-zinc-50"
+        >
+            <Background 
+              color="#a1a1aa" 
+              gap={20} 
+              size={1}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls className="bg-transparent border-none shadow-none !bottom-4 !right-4" />
+        </ReactFlow>
       </div>
 
-      {/* Modern Floating Configuration Panel */}
-      {selectedNode && (
+      {/* Add Node Floating Button (if no library open) */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
+        <button
+            onClick={() => setIsLibraryOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-full shadow-lg hover:bg-zinc-800 hover:scale-105 transition-all font-medium text-sm"
+        >
+            <Plus className="w-4 h-4" />
+            <span>Add Node</span>
+        </button>
+      </div>
+
+      {/* Config Panel - Removed as requested, config is now on the node */}
+      {/* {selectedNode && (
         <div className="fixed inset-0 z-40 pointer-events-none">
-          <div className="absolute inset-y-0 right-0 w-96 pointer-events-auto">
+          <div className="absolute inset-y-0 right-0 w-96 pointer-events-auto bg-white border-l border-zinc-200 shadow-xl">
             <NodeConfigPanel
               key={selectedNode.id}
               node={selectedNode}
               onNodeUpdate={handleNodeUpdate}
-              onClose={() => setSelectedNode(null)}
-              scrapedElements={scrapingResult?.data || []}
+              onClose={() => setSelectedNodeId(null)}
             />
           </div>
         </div>
-      )}
+      )} */}
 
-      {/* Node Library Modal */}
-      {isLibraryOpen && (
-        <NodeLibrary
-          onNodeAdd={handleNodeAdd}
-          onClose={() => setIsLibraryOpen(false)}
-          connectingFromNode={connectingFromNode}
-          currentWorkflow={currentWorkflow}
-        />
-      )}
+      {/* Add Node Menu */}
+      <AddNodeMenu
+        isOpen={isLibraryOpen}
+        onClose={() => {
+          setIsLibraryOpen(false);
+          setConnectingFromNode(null);
+        }}
+        onNodeAdd={handleNodeAdd}
+        connectingFromNode={connectingFromNode}
+        currentWorkflow={currentWorkflow}
+      />
 
-      {/* Scraping Results Modal */}
-      {showScrapingResults && scrapingResult && (
-        <ScrapingResults
-          result={scrapingResult}
-          onClose={() => setShowScrapingResults(false)}
-        />
-      )}
-
-      {/* Integration Modal */}
+      {/* Modals */}
       <IntegrationModal
         workflow={currentWorkflow}
         isOpen={showIntegrationModal}
         onClose={() => setShowIntegrationModal(false)}
       />
 
-      {/* Environment Components Modal */}
       <EnvironmentComponents
         isOpen={showEnvironmentComponents}
-        onClose={() => setShowEnvironmentComponents(false)}
+        onClose={() => {
+            setShowEnvironmentComponents(false);
+            setComponentPickerCallback(null);
+        }}
+        selectionMode={!!componentPickerCallback}
+        filterType="css_selector"
+        onSelectComponent={(component) => {
+            if (componentPickerCallback) {
+                componentPickerCallback(component.value);
+                setShowEnvironmentComponents(false);
+                setComponentPickerCallback(null);
+            }
+        }}
       />
     </div>
   );
 };
+
+const WorkflowBuilder: React.FC<WorkflowBuilderProps> = (props) => (
+  <ReactFlowProvider>
+    <WorkflowBuilderContent {...props} />
+  </ReactFlowProvider>
+);
 
 export default WorkflowBuilder;

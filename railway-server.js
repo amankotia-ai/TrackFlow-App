@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createClickHouseClient } from '@clickhouse/client';
 // Dynamic import will be used for hierarchical scrape to avoid module resolution issues
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,22 @@ const supabaseUrl = process.env.SUPABASE_URL || 'https://xlzihfstoqdbgdegqkoi.su
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsemloZnN0b3FkYmdkZWdxa29pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMTUzMDQsImV4cCI6MjA2ODU5MTMwNH0.uE0aEwBJN-sQCesYVjKNJdRyBAaaI_q0tFkSlTBilHw';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Initialize ClickHouse client
+const clickhouse = createClickHouseClient({
+  url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  username: process.env.CLICKHOUSE_USER || 'default',
+  password: process.env.CLICKHOUSE_PASSWORD || '',
+  database: process.env.CLICKHOUSE_DATABASE || 'default',
+  clickhouse_settings: {
+    // efficient handling for async inserts
+    async_insert: 1,
+    wait_for_async_insert: 0,
+  },
+});
+
+console.log('📊 ClickHouse client initialized');
+
 
 // Service role client for demo workflows (bypasses RLS)
 const supabaseServiceRole = createClient(
@@ -358,6 +375,29 @@ app.post('/api/analytics/track', async (req, res) => {
     console.log('📊 Received analytics events:', events?.length || 0);
     
     if (events && events.length > 0) {
+      // Async insert to ClickHouse
+      try {
+        await clickhouse.insert({
+          table: 'analytics_events',
+          values: events.map(event => ({
+            event_type: event.eventType,
+            page_url: event.pageContext?.url || event.pageUrl || '',
+            element_selector: event.elementSelector || '',
+            timestamp: new Date().toISOString(), // ClickHouse handles basic ISO
+            session_id: event.sessionId || '',
+            user_id: event.userId ? String(event.userId) : null,
+            workflow_id: event.workflowId ? String(event.workflowId) : null,
+            metadata: JSON.stringify(event.eventData || {}),
+            device_type: event.deviceType || 'desktop',
+            browser_info: JSON.stringify(event.browserInfo || {})
+          })),
+          format: 'JSONEachRow',
+        });
+        console.log('✅ Events flushed to ClickHouse');
+      } catch (chError) {
+        console.error('⚠️ ClickHouse insert failed (continuing):', chError.message);
+      }
+
       // Log the events for now (in production, save to database)
       events.forEach(event => {
         console.log('📊 Event:', event.eventType, event.elementSelector, event.pageContext?.pathname);
@@ -789,6 +829,28 @@ app.post('/api/journey-update', async (req, res) => {
 
     console.log(`📊 Journey update received: ${sessionId} (${analytics.intentLevel} intent, ${analytics.pageCount} pages)`);
 
+    // Dual-write to ClickHouse
+    try {
+      await clickhouse.insert({
+        table: 'visitor_journeys',
+        values: [{
+          session_id: sessionId,
+          visitor_id: analytics.visitorId || sessionId,
+          start_time: analytics.startTime ? new Date(analytics.startTime).toISOString() : new Date().toISOString(),
+          end_time: new Date().toISOString(),
+          page_count: analytics.pageCount || 1,
+          event_count: analytics.eventCount || 0,
+          device_type: analytics.deviceType || 'desktop',
+          country_code: analytics.country || 'unknown',
+          utm_source: analytics.utmSource || '',
+          utm_campaign: analytics.utmCampaign || ''
+        }],
+        format: 'JSONEachRow'
+      });
+    } catch (chError) {
+      console.error('⚠️ ClickHouse journey insert failed:', chError.message);
+    }
+
     // Call Supabase function to update journey
     const { data, error } = await supabaseServiceRole.rpc('update_journey_from_client', {
       p_session_id: sessionId,
@@ -949,6 +1011,90 @@ app.get('/api/journey-analytics/high-intent', async (req, res) => {
       error: 'Failed to fetch high-intent journeys'
     });
   }
+});
+
+// --- ClickHouse Analytics API Endpoints ---
+
+// Dashboard Aggregated Stats
+app.get('/api/analytics/dashboard', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    
+    // Parallel fetch: Supabase for workflows, ClickHouse for events
+    const [workflowsResult, eventsResult] = await Promise.all([
+        supabase.from('workflows').select('id, status', { count: 'exact' }),
+        clickhouse.query({
+            query: `
+                SELECT 
+                    count() as total_events,
+                    uniq(session_id) as unique_sessions
+                FROM analytics_events
+                WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+            `,
+            query_params: { days: parseInt(days) },
+            format: 'JSONEachRow'
+        })
+    ]);
+
+    const workflows = workflowsResult.data || [];
+    const chData = await eventsResult.json();
+    const eventStats = chData[0] || { total_events: 0, unique_sessions: 0 };
+
+    res.json({
+        success: true,
+        stats: {
+            totalPlaybooks: workflows.length,
+            activePlaybooks: workflows.filter(w => w.status === 'active').length,
+            totalEvents: parseInt(eventStats.total_events),
+            uniqueSessions: parseInt(eventStats.unique_sessions)
+        }
+    });
+  } catch (error) {
+      console.error('Dashboard stats error:', error);
+      // Fallback for demo purposes if ClickHouse is not ready
+      res.json({
+        success: true,
+        stats: {
+            totalPlaybooks: 0,
+            activePlaybooks: 0,
+            totalEvents: 0,
+            uniqueSessions: 0,
+            note: 'ClickHouse unavailable, showing empty stats'
+        }
+      });
+  }
+});
+
+// Timeseries Data
+app.get('/api/analytics/timeseries', async (req, res) => {
+    try {
+        const { days = 30 } = req.query;
+        
+        const resultSet = await clickhouse.query({
+            query: `
+                SELECT 
+                    toDate(timestamp) as date,
+                    count() as events,
+                    uniq(session_id) as sessions
+                FROM analytics_events
+                WHERE timestamp > now() - INTERVAL {days:UInt32} DAY
+                GROUP BY date
+                ORDER BY date ASC
+            `,
+            query_params: { days: parseInt(days) },
+            format: 'JSONEachRow'
+        });
+
+        const data = await resultSet.json();
+        
+        res.json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        console.error('Timeseries error:', error);
+        res.status(500).json({ error: 'Failed to fetch timeseries' });
+    }
 });
 
 // SPA fallback - serve React app for all non-API routes
