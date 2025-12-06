@@ -2930,13 +2930,66 @@
 
         this.log(`📊 Tracking execution for workflow: ${workflow.name}`, 'info', trackingPayload);
 
-        const response = await fetch(`https://xlzihfstoqdbgdegqkoi.supabase.co/functions/v1/track-execution`, {
+        // 1. Send to Supabase Edge Function (Persistent Storage)
+        const supabasePromise = fetch(`https://xlzihfstoqdbgdegqkoi.supabase.co/functions/v1/track-execution`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(trackingPayload)
         });
+
+        // 2. Send to ClickHouse (Real-time Analytics) via Railway API
+        // Format payload for ClickHouse endpoint
+        const clickHousePayload = {
+          events: [{
+            eventType: 'workflow_execution',
+            workflowId: workflow.id,
+            userId: workflow.user_id,
+            sessionId: this.generateSessionId(),
+            pageUrl: executionData.pageUrl || window.location.href,
+            deviceType: executionData.deviceType,
+            eventData: {
+              status: executionData.status,
+              executionTimeMs: executionData.executionTimeMs,
+              actionsCount: (executionData.actionsExecuted || []).length,
+              error: executionData.errorMessage
+            },
+            browserInfo: {
+              userAgent: navigator.userAgent
+            }
+          }]
+        };
+
+        // Add individual action events
+        if (executionData.actionsExecuted && executionData.actionsExecuted.length > 0) {
+            executionData.actionsExecuted.forEach(action => {
+                clickHousePayload.events.push({
+                    eventType: 'action_executed',
+                    workflowId: workflow.id,
+                    userId: workflow.user_id,
+                    sessionId: this.generateSessionId(),
+                    pageUrl: executionData.pageUrl || window.location.href,
+                    elementSelector: action.selector,
+                    deviceType: executionData.deviceType,
+                    eventData: {
+                        actionName: action.name,
+                        config: action.config,
+                        executionTimeMs: action.executionTimeMs
+                    }
+                });
+            });
+        }
+
+        const clickHousePromise = fetch(`${this.config.apiEndpoint}/api/analytics/track`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(clickHousePayload),
+            keepalive: true
+        }).catch(err => this.log(`⚠️ ClickHouse tracking failed: ${err.message}`, 'warning'));
+
+        // Wait for Supabase (critical) but let ClickHouse run in background (or parallel)
+        const [response] = await Promise.all([supabasePromise, clickHousePromise]);
 
         if (response.ok) {
           const result = await response.json();

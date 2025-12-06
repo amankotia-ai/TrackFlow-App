@@ -735,7 +735,7 @@
   if (!window.DISABLE_AUTO_JOURNEY_TRACKING) {
     window.journeyTracker = new CookieFreeJourneyTracker({
       debug: false,
-      apiEndpoint: window.TRACKFLOW_API_ENDPOINT || null // Set to null by default, or configure manually
+      apiEndpoint: window.TRACKFLOW_API_ENDPOINT || 'https://trackflow-app-production.up.railway.app/api' // Set default endpoint
     });
   }
   
