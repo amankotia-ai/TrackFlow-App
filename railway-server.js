@@ -68,6 +68,24 @@ console.log('🔑 Supabase Service Role Key:', process.env.SUPABASE_SERVICE_ROLE
 const ipCountryCache = new Map();
 const IP_CACHE_TTL = 1000 * 60 * 60; // 1 hour cache
 
+// Generate anonymous name from visitor ID (deterministic)
+function generateAnonymousName(visitorId) {
+  const adjectives = ['Swift', 'Happy', 'Clever', 'Brave', 'Quiet', 'Bold', 'Eager', 'Wise', 'Gentle', 'Rapid', 'Calm', 'Bright'];
+  const animals = ['Tiger', 'Eagle', 'Fox', 'Bear', 'Wolf', 'Owl', 'Hawk', 'Panda', 'Lion', 'Falcon', 'Dolphin', 'Raven'];
+  
+  let hash = 0;
+  for (let i = 0; i < visitorId.length; i++) {
+    hash = ((hash << 5) - hash) + visitorId.charCodeAt(i);
+    hash = hash & hash;
+  }
+  hash = Math.abs(hash);
+  
+  const adjIndex = hash % adjectives.length;
+  const animalIndex = Math.floor(hash / adjectives.length) % animals.length;
+  
+  return `${adjectives[adjIndex]} ${animals[animalIndex]}`;
+}
+
 // Get country code from IP address using free API
 async function getCountryFromIP(ip) {
   // Skip local/private IPs
@@ -508,21 +526,27 @@ app.post('/api/analytics/track', async (req, res) => {
       const visitorId = firstEvent?.visitorId || bodyVisitorId;
       if (visitorId) {
         try {
+          const now = new Date();
           // Use ReplacingMergeTree - insert will update existing record
           await clickhouse.insert({
             table: 'visitors',
             values: [{
               visitor_id: visitorId,
-              anonymous_name: firstEvent?.anonymousName || '',
-              last_seen: new Date().toISOString(),
+              anonymous_name: firstEvent?.anonymousName || generateAnonymousName(visitorId),
+              first_seen: now,
+              last_seen: now,
+              total_sessions: 1,
+              total_page_views: 1,
+              total_events: events.length,
               country_code: serverCountryCode || firstEvent?.countryCode || 'US',
               primary_device: firstEvent?.deviceType || 'desktop',
               primary_browser: firstEvent?.browserInfo?.browser || ''
             }],
             format: 'JSONEachRow',
           });
+          console.log(`✅ Visitor record updated: ${visitorId}`);
         } catch (visitorError) {
-          // Silently fail - visitor might already exist
+          console.error('⚠️ Visitor insert failed:', visitorError.message);
         }
       }
 
@@ -988,18 +1012,24 @@ app.post('/api/journey-update', async (req, res) => {
       console.log('✅ Journey written to ClickHouse');
 
       // Update visitor record
+      const now = new Date();
       await clickhouse.insert({
         table: 'visitors',
         values: [{
           visitor_id: effectiveVisitorId,
-          anonymous_name: effectiveName,
-          last_seen: new Date().toISOString(),
+          anonymous_name: effectiveName || generateAnonymousName(effectiveVisitorId),
+          first_seen: now,
+          last_seen: now,
+          total_sessions: 1,
+          total_page_views: analytics.pageCount || 1,
+          total_events: analytics.eventCount || 0,
           country_code: countryCode,
           primary_device: analytics.deviceType || 'desktop',
           primary_browser: analytics.browser || ''
         }],
         format: 'JSONEachRow'
       });
+      console.log(`✅ Visitor record updated from journey: ${effectiveVisitorId}`);
 
       // Update visitor activity for heatmap
       await clickhouse.insert({

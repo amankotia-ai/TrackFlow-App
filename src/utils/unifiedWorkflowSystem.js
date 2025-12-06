@@ -2944,11 +2944,19 @@
         // Include country code from geolocation data for globe visualization
         const countryCode = this.geolocationData?.countryCode || 'unknown';
         
+        // Get visitor identity from TrackFlowIdentity or journey tracker
+        const visitorId = this.getVisitorId();
+        const anonymousName = this.getAnonymousName(visitorId);
+        
         const clickHousePayload = {
+          visitorId: visitorId,
+          sessionId: this.generateSessionId(),
           events: [{
             eventType: 'workflow_execution',
             workflowId: workflow.id,
             userId: workflow.user_id,
+            visitorId: visitorId,
+            anonymousName: anonymousName,
             sessionId: this.generateSessionId(),
             pageUrl: executionData.pageUrl || window.location.href,
             deviceType: executionData.deviceType,
@@ -2962,7 +2970,8 @@
               countryCode: countryCode
             },
             browserInfo: {
-              userAgent: navigator.userAgent
+              userAgent: navigator.userAgent,
+              browser: this.getBrowserName()
             }
           }]
         };
@@ -2974,6 +2983,8 @@
                     eventType: 'action_executed',
                     workflowId: workflow.id,
                     userId: workflow.user_id,
+                    visitorId: visitorId,
+                    anonymousName: anonymousName,
                     sessionId: this.generateSessionId(),
                     pageUrl: executionData.pageUrl || window.location.href,
                     elementSelector: action.selector,
@@ -2984,6 +2995,9 @@
                         config: action.config,
                         executionTimeMs: action.executionTimeMs,
                         countryCode: countryCode
+                    },
+                    browserInfo: {
+                      browser: this.getBrowserName()
                     }
                 });
             });
@@ -3020,6 +3034,78 @@
         this._sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
       return this._sessionId;
+    }
+
+    /**
+     * Get or create a persistent visitor ID
+     */
+    getVisitorId() {
+      // Try to get from TrackFlowIdentity (set by journey-tracker)
+      if (window.TrackFlowIdentity?.getVisitorId) {
+        return window.TrackFlowIdentity.getVisitorId();
+      }
+      
+      // Try to get from journey tracker
+      if (this.journeyTracker?.visitorId) {
+        return this.journeyTracker.visitorId;
+      }
+      
+      // Fallback: create/get from localStorage
+      const STORAGE_KEY = 'tf_visitor_id';
+      try {
+        let visitorId = localStorage.getItem(STORAGE_KEY);
+        if (!visitorId) {
+          visitorId = `v_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 12)}`;
+          localStorage.setItem(STORAGE_KEY, visitorId);
+        }
+        return visitorId;
+      } catch (e) {
+        // If localStorage fails, generate a temporary ID
+        return `temp_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 8)}`;
+      }
+    }
+
+    /**
+     * Generate anonymous name from visitor ID (deterministic)
+     */
+    getAnonymousName(visitorId) {
+      // Try to get from TrackFlowIdentity
+      if (window.TrackFlowIdentity?.generateAnonymousName) {
+        return window.TrackFlowIdentity.generateAnonymousName(visitorId);
+      }
+      
+      // Try to get from journey tracker
+      if (this.journeyTracker?.anonymousName) {
+        return this.journeyTracker.anonymousName;
+      }
+      
+      // Fallback: generate name
+      const adjectives = ['Swift', 'Happy', 'Clever', 'Brave', 'Quiet', 'Bold', 'Eager', 'Wise', 'Gentle', 'Rapid'];
+      const animals = ['Tiger', 'Eagle', 'Fox', 'Bear', 'Wolf', 'Owl', 'Hawk', 'Panda', 'Lion', 'Falcon'];
+      
+      let hash = 0;
+      for (let i = 0; i < visitorId.length; i++) {
+        hash = ((hash << 5) - hash) + visitorId.charCodeAt(i);
+        hash = hash & hash;
+      }
+      hash = Math.abs(hash);
+      
+      const adjIndex = hash % adjectives.length;
+      const animalIndex = Math.floor(hash / adjectives.length) % animals.length;
+      
+      return `${adjectives[adjIndex]} ${animals[animalIndex]}`;
+    }
+
+    /**
+     * Get browser name from user agent
+     */
+    getBrowserName() {
+      const ua = navigator.userAgent;
+      if (ua.includes('Firefox')) return 'Firefox';
+      if (ua.includes('Edg')) return 'Edge';
+      if (ua.includes('Chrome')) return 'Chrome';
+      if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+      return 'Unknown';
     }
 
     delay(ms) {
